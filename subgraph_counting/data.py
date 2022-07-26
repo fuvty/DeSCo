@@ -9,37 +9,43 @@ import multiprocessing as mp
 import random
 from typing import Callable, List, Optional, Tuple, Union
 
-import deepsnap as ds
-import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import scipy.stats as stats
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 import torch_geometric as pyg
 import torch_geometric.utils as pyg_utils
-from common import combined_syn, feature_preprocess, utils
-from common.data import DataSource
 from deepsnap.batch import Batch
 from deepsnap.dataset import GraphDataset
 from deepsnap.graph import Graph as DSGraph
-from matplotlib import cm
-from networkx.algorithms.operators.product import tensor_product
-from networkx.classes.function import to_undirected
-from networkx.convert import to_networkx_graph
 from ogb.nodeproppred import PygNodePropPredDataset
-from playground.lib.Anchor import GenVMap, SymmetricFactor
-from sklearn.decomposition import PCA
-from torch import tensor
-from torch.utils.data import DataLoader
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric import utils
 from torch_geometric.data import InMemoryDataset, download_url
 from torch_geometric.datasets import Entities, Planetoid, TUDataset
 from tqdm import tqdm
 
+from subgraph_counting import combined_syn
+
+def SymmetricFactor(graph: nx.Graph) -> int:
+    '''
+    input: graph that need to compute symmetric factor
+    output: symmetric fator, which is the proportion of the number of mapping and the number of pattern
+    '''
+    maps = GenVMap(graph, graph)
+    return len(maps)
+
+def GenVMap(subgraph: nx.Graph, graph: nx.Graph) -> list[map]:
+    '''
+    input: subgraph and graph in nx.graph
+    output: vmaps, map from nodes of subgraph to that of graph
+    '''
+    GraphMatcher = nx.algorithms.isomorphism.GraphMatcher(graph, subgraph)
+    SBM_iter = GraphMatcher.subgraph_isomorphisms_iter()
+    maps = [dict(zip(map.values(), map.keys())) for map in SBM_iter]
+    return maps
 
 def load_data(dataset_name: str, n_neighborhoods= -1, transform= None):
     # make dir data if not exist
@@ -162,8 +168,6 @@ def count_graphlet(query: nx.Graph, target: nx.Graph, symmetry_factor=1) -> int:
     ### end debug
     return int(count)
 
-
-
 def count_canonical_mp(query: nx.Graph, targets, num_worker: int, from_pyg= False):
     '''
     input: query graph, iterable target graphs, numworker
@@ -285,6 +289,9 @@ def sample_graphlet(graphs, *args, **kwargs):
         graph = pyg_utils.to_networkx(graph, to_undirected=True)
     return graph 
 
+class DataSource:
+    def gen_batch(batch_target, batch_neg_target, batch_neg_query, train):
+        raise NotImplementedError
 class OTFSynCanonicalDataSource(DataSource):
     """ On-the-fly generated synthetic data for training the subgraph model.
 
@@ -477,6 +484,14 @@ class Astro(InMemoryDataset):
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
+def batch_nx_graphs(graphs, anchors=None):    
+    if anchors is not None:
+        for anchor, g in zip(anchors, graphs):
+            for v in g.nodes:
+                g.nodes[v]["node_feature"] = torch.tensor([float(v == anchor)])
+
+    batch = Batch.from_data_list([DSGraph(g) for g in graphs])
+    return batch
 
 if __name__ == '__main__':
     # from common.utils import batch_nx_graphs

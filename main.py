@@ -14,18 +14,14 @@ import pytorch_lightning as pl
 import torch
 import torch_geometric as pyg
 import torch_geometric.transforms as T
-from common import utils
-from playground.lib.Anchor import SymmetricFactor
+
 from subgraph_matching.config import parse_encoder
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 from tqdm.contrib import tzip
 
 from subgraph_counting.config import parse_gossip
-from subgraph_counting.data import (OTFSynCanonicalDataSource, count_canonical,
-                                    count_graphlet, get_neigh_canonical,
-                                    get_neigh_hetero, load_data,
-                                    sample_graphlet, sample_neigh_canonical)
+from subgraph_counting.data import load_data
 from subgraph_counting.lightning_model import (GossipCountingModel,
                                                NeighborhoodCountingModel)
 from subgraph_counting.workload import NeighborhoodDataModule, Workload

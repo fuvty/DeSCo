@@ -22,16 +22,16 @@ import numpy as np
 import torch
 import torch_geometric as pyg
 import torch_geometric.transforms as T
-from playground.lib.Anchor import SymmetricFactor
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 from tqdm.contrib import tzip
 import pytorch_lightning as pl
 
-from subgraph_counting.data import (OTFSynCanonicalDataSource, count_canonical,
+from subgraph_counting.data import (count_canonical,
                                     count_graphlet, get_neigh_canonical,
                                     get_neigh_hetero, load_data,
-                                    sample_graphlet, sample_neigh_canonical)
+                                    sample_graphlet, sample_neigh_canonical, 
+                                    SymmetricFactor)
 from subgraph_counting.transforms import (NetworkxToHetero, Relabel,
                                           RemoveSelfLoops)
 

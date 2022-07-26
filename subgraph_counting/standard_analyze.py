@@ -41,7 +41,7 @@ from subgraph_counting.config import parse_count
 from subgraph_counting.data import (count_canonical, count_canonical_mp,
                                     get_neigh_canonical, load_data,
                                     sample_neigh_canonical, true_count_anchor)
-from subgraph_counting.models import CanonicalCountModel
+from subgraph_counting.gnn_model import CanonicalCountModel
 from subgraph_counting.train import Workload
 
 # %% [markdown]

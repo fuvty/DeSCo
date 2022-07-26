@@ -11,31 +11,6 @@ from torch_geometric.data import HeteroData
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.typing import EdgeType, NodeType, QueryType
 
-def to_device(data, device):
-    if isinstance(data, pyg.data.Data) or isinstance(data, pyg.data.HeteroData):
-        # pyg data batch
-        return data.to(device)
-    elif isinstance(data, tuple):
-        if len(data) == 4:
-            # lrp data batch
-            batch, pooling_matrix, sp_matrices, label = data
-            return batch, pooling_matrix, sp_matrices, label.to(device), device
-        else: 
-            raise NotImplementedError
-    else:
-        raise NotImplementedError
-
-def get_truth(data):
-    '''
-    get ground truth count from data
-    '''
-    if isinstance(data, pyg.data.Data) or isinstance(data, pyg.data.HeteroData):
-        return data.y
-    elif isinstance(data, tuple):
-        return data[3].squeeze(dim=1) # label
-    else:
-        raise NotImplementedError
-
 class ToTCONV(BaseTransform):
     '''
     recommand call \'pyg_graph = T.ToUndirected()(pyg_graph)\' first
@@ -92,40 +67,8 @@ class ToTCONV(BaseTransform):
 
             data[src_type, rel_type+'_triangle', dst_type].edge_index = edge_tensor[:,tri_edge_index] # size = 2*#triangle_edge
             data[src_type, rel_type+'_tride', dst_type].edge_index = edge_tensor[:,~tri_edge_index] # size = 2*#tride_edge
-
         return data
     
-
-def to_homogeneous_edge_index(data: HeteroData,) -> Tuple[Optional[Tensor], Dict[NodeType, Any], Dict[EdgeType, Any]]:
-    # Record slice information per node type:
-    cumsum = 0
-    node_slices: Dict[NodeType, Tuple[int, int]] = {}
-    for node_type, store in data._node_store_dict.items():
-        num_nodes = store.num_nodes
-        node_slices[node_type] = (cumsum, cumsum + num_nodes)
-        cumsum += num_nodes
-
-    # Record edge indices and slice information per edge type:
-    cumsum = 0
-    edge_indices: List[Tensor] = []
-    edge_slices: Dict[EdgeType, Tuple[int, int]] = {}
-    for edge_type, store in data._edge_store_dict.items():
-        src, _, dst = edge_type
-        offset = [[node_slices[src][0]], [node_slices[dst][0]]]
-        offset = torch.tensor(offset, device=store.edge_index.device)
-        edge_indices.append(store.edge_index + offset)
-
-        num_edges = store.num_edges
-        edge_slices[edge_type] = (cumsum, cumsum + num_edges)
-        cumsum += num_edges
-
-    edge_index = None
-    if len(edge_indices) == 1:  # Memory-efficient `torch.cat`:
-        edge_index = edge_indices[0]
-    elif len(edge_indices) > 0:
-        edge_index = torch.cat(edge_indices, dim=-1)
-
-    return edge_index, node_slices, edge_slices
 
 class ToTconvHetero(BaseTransform):
     '''
@@ -184,6 +127,64 @@ class ToTconvHetero(BaseTransform):
             del data[src_type, rel_type, dst_type]
 
         return data
+
+
+def to_homogeneous_edge_index(data: HeteroData,) -> Tuple[Optional[Tensor], Dict[NodeType, Any], Dict[EdgeType, Any]]:
+    # Record slice information per node type:
+    cumsum = 0
+    node_slices: Dict[NodeType, Tuple[int, int]] = {}
+    for node_type, store in data._node_store_dict.items():
+        num_nodes = store.num_nodes
+        node_slices[node_type] = (cumsum, cumsum + num_nodes)
+        cumsum += num_nodes
+
+    # Record edge indices and slice information per edge type:
+    cumsum = 0
+    edge_indices: List[Tensor] = []
+    edge_slices: Dict[EdgeType, Tuple[int, int]] = {}
+    for edge_type, store in data._edge_store_dict.items():
+        src, _, dst = edge_type
+        offset = [[node_slices[src][0]], [node_slices[dst][0]]]
+        offset = torch.tensor(offset, device=store.edge_index.device)
+        edge_indices.append(store.edge_index + offset)
+
+        num_edges = store.num_edges
+        edge_slices[edge_type] = (cumsum, cumsum + num_edges)
+        cumsum += num_edges
+
+    edge_index = None
+    if len(edge_indices) == 1:  # Memory-efficient `torch.cat`:
+        edge_index = edge_indices[0]
+    elif len(edge_indices) > 0:
+        edge_index = torch.cat(edge_indices, dim=-1)
+
+    return edge_index, node_slices, edge_slices
+
+
+def to_device(data, device):
+    if isinstance(data, pyg.data.Data) or isinstance(data, pyg.data.HeteroData):
+        # pyg data batch
+        return data.to(device)
+    elif isinstance(data, tuple):
+        if len(data) == 4:
+            # lrp data batch
+            batch, pooling_matrix, sp_matrices, label = data
+            return batch, pooling_matrix, sp_matrices, label.to(device), device
+        else: 
+            raise NotImplementedError
+    else:
+        raise NotImplementedError
+
+def get_truth(data):
+    '''
+    get ground truth count from data
+    '''
+    if isinstance(data, pyg.data.Data) or isinstance(data, pyg.data.HeteroData):
+        return data.y
+    elif isinstance(data, tuple):
+        return data[3].squeeze(dim=1) # label
+    else:
+        raise NotImplementedError
 
 def NetworkxToHetero(nx_graph: Union[nx.Graph, nx.DiGraph], type_key: str = 'type', feat_key: str = 'feat') -> pyg.data.HeteroData:
     '''

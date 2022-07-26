@@ -20,9 +20,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from common import data, models, utils
-from playground.lib.Anchor import SymmetricFactor
-from subgraph_matching.config import parse_encoder
+
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import DataLoader
 from torch_geometric.datasets import TUDataset
@@ -31,10 +29,10 @@ from tqdm import tqdm
 from subgraph_counting.config import parse_count
 from subgraph_counting.data import (OTFSynCanonicalDataSource, count_canonical,
                                     count_canonical_mp, sample_neigh_canonical,
-                                    true_count_anchor)
-from subgraph_counting.models import (CanonicalCountModel, MotifCountModel,
+                                    true_count_anchor, SymmetricFactor, batch_nx_graphs)
+from subgraph_counting.gnn_model import (CanonicalCountModel, MotifCountModel,
                                       MultiTaskModel)
-from subgraph_counting.train import Workload
+from subgraph_counting.workload import Workload
 
 if __name__ == '__main__':
     # args
@@ -90,7 +88,7 @@ if __name__ == '__main__':
         count_motif_model = []
         class_motif_model = []
         for query_id in range(len(queries)):
-            query = utils.batch_nx_graphs([queries[query_id] for _ in range(args.val_size)]).to(device)
+            query = batch_nx_graphs([queries[query_id] for _ in range(args.val_size)]).to(device)
             count_valid = count_motif_valid[query_id][0]
 
             emb_target = model.emb_model(neighs_batch_valid[0].to(device))

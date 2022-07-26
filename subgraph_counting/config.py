@@ -1,7 +1,7 @@
 import argparse
 
 from torch.utils.data import dataset
-from common import utils
+from subgraph_counting import utils
 
 def parse_count(parser, arg_str=None):
     cnt_parser = parser.add_argument_group()

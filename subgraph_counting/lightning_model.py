@@ -1,6 +1,5 @@
 import os
 import sys
-from turtle import forward
 
 parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(parentdir)
@@ -13,9 +12,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric as pyg
-from common.models import BaseGNN
 from torch_geometric.loader import DataLoader
 
+from subgraph_counting.gnn_model import BaseGNN
 from subgraph_counting.transforms import NetworkxToHetero
 from subgraph_counting.workload import graph_atlas_plus
 
@@ -27,8 +26,8 @@ def gen_queries(query_ids, queries=None):
     for query_pyg in queries_pyg:
         query_pyg['union_node'].node_feature = torch.zeros((query_pyg['union_node'].num_nodes, 1))
     # end {query}, commonly used for all
-
     return queries_pyg
+
 class NeighborhoodCountingModel(pl.LightningModule):
     def __init__(self, input_dim, hidden_dim, args, **kwargs):
         '''
@@ -201,6 +200,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
         else:
             self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union', 'union_node')] ), aggr='sum')
 
+
 class GossipCountingModel(pl.LightningModule):
     def __init__(self, input_dim, hidden_dim, args, **kwargs):
         super(GossipCountingModel, self).__init__()
@@ -262,3 +262,5 @@ class GossipCountingModel(pl.LightningModule):
 
     def set_query_emb(self, query_emb: torch.Tensor, query_ids=None, queries=None):
         self.query_emb = query_emb
+
+
