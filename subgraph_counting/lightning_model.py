@@ -261,6 +261,6 @@ class GossipCountingModel(pl.LightningModule):
         return loss
 
     def set_query_emb(self, query_emb: torch.Tensor, query_ids=None, queries=None):
-        self.query_emb = query_emb
+        self.query_emb = query_emb.detach()
 
 

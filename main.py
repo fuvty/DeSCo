@@ -14,17 +14,14 @@ import pytorch_lightning as pl
 import torch
 import torch_geometric as pyg
 import torch_geometric.transforms as T
-
-from subgraph_matching.config import parse_encoder
 from torch_geometric.loader import DataLoader
-from tqdm import tqdm
-from tqdm.contrib import tzip
 
-from subgraph_counting.config import parse_gossip
+from subgraph_counting import utils
+from subgraph_counting.config import parse_gossip, parse_encoder
 from subgraph_counting.data import load_data
 from subgraph_counting.lightning_model import (GossipCountingModel,
                                                NeighborhoodCountingModel)
-from subgraph_counting.workload import NeighborhoodDataModule, Workload
+from subgraph_counting.workload import Workload
 
 if __name__ == "__main__":
     # define dataset
@@ -67,7 +64,7 @@ if __name__ == "__main__":
 
     neighborhood_model.set_queries(query_ids)
 
-    neighborhood_trainer = pl.Trainer(max_epochs=100, accelerator="gpu", devices=[4])
+    neighborhood_trainer = pl.Trainer(max_epochs=10, accelerator="gpu", devices=[0])
     # neighborhood_trainer.fit(neighborhood_model, datamodule=neighborhoood_dataloader)
     neighborhood_trainer.fit(model=neighborhood_model, train_dataloaders=neighborhood_train_dataloader, val_dataloaders=neighborhood_test_dataloader)
 
@@ -99,7 +96,7 @@ if __name__ == "__main__":
     gossip_train_dataloader = DataLoader(train_workload.gossip_dataset)
     gossip_test_dataloader = DataLoader(test_workload.gossip_dataset)
 
-    gossip_trainer = pl.Trainer(max_epochs=100, accelerator="gpu", devices=[4])
+    gossip_trainer = pl.Trainer(max_epochs=10, accelerator="gpu", devices=[0])
     gossip_trainer.fit(model=gossip_model, train_dataloaders=gossip_train_dataloader, val_dataloaders=gossip_test_dataloader)
 
     # gossip inference

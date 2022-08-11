@@ -77,7 +77,7 @@ class GossipDataset(pyg.data.InMemoryDataset):
         num_neighborhood, num_query = count.shape
         num_node = len(neighborhood_indicator)
         self.data.x = torch.zeros(num_node, num_query)
-        self.data.x[neighborhood_indicator, :] = count
+        self.data.x[neighborhood_indicator, :] = count.detach()
         
         self.slices['x'] = self.slices['y']
 
