@@ -3,67 +3,52 @@ import argparse
 from torch.utils.data import dataset
 from subgraph_counting import utils
 
-def parse_count(parser, arg_str=None):
-    cnt_parser = parser.add_argument_group()
+def parse_neighborhood(parser, arg_str=None):
+    enc_parser = parser.add_argument_group()
     #utils.parse_optimizer(parser)
 
-    cnt_parser.add_argument('--count_type', type=str,
-                        help='model used to count the number of query')
-    cnt_parser.add_argument('--embs_path', type=str,
-                        help='file path of the embs')
-    cnt_parser.add_argument('--batch_size', type=int,
-                        help='batch size of the training epoch')
-    cnt_parser.add_argument('--num_cpu', type=int,
-                        help='number of cpu used for ground truth')
-    cnt_parser.add_argument('--model_path', type=str,
-                        help='path to save the model')
-    '''
-    cnt_parser.add_argument('--eval_interval', type=int,
-                        help='how often to eval & save model during training')
-    '''
-    cnt_parser.add_argument('--val_size', type=int,
-                        help='validation set size')
-    cnt_parser.add_argument('--dataset', type=str,
-                        help='name of the dataset used for training')
-    cnt_parser.add_argument('--gpu', type=str,
-                        help='input cuda:x to select which GPU to run on')
-    cnt_parser.add_argument('--use_log', type=str,
-                        help='use log2(count+1) as the ground truth of number of pattern')
-    cnt_parser.add_argument('--use_norm', type=str,
-                        help='use (log2(count+1)-mean)/std as the ground truth of number of pattern')
-    # cnt_parser.add_argument('--use_hetero', type=str,
-    #                     help='view graph as heterogeneous graph')
-    cnt_parser.add_argument('--objective', type=str,
-                        help='which obejective is the model going to learn, choosing from canonical/graphlet')
-    cnt_parser.add_argument('--relabel_mode',
-                        help='which mode to use to relabel node index, if do not wish to relabel, set to None')
-
-    cnt_parser.set_defaults(
-        # experiment
-        count_type= 'motif',
-        objective= 'canonical',
-        embs_path= '',
-        num_cpu= 1,
-        # n_neighborhoods =64*900, # more query (6\7\8)
-        # n_neighborhoods = 64*100,
-        n_neighborhoods= 64*100,
-        val_size=64*100,
-        model_path = 'ckpt/tmp',
-        use_log = True,
-        use_norm = False,
-        # use_hetero = True,
-        # training
-        batch_size= 64,
-        weight_decay= 0.0,
-        lr= 1e-3,
-        num_epoch = 100,
-        dataset= "syn",
-        gpu="cuda",
-        # relabel_mode="decreasing_degree"
-        relabel_mode= None
+    enc_parser.add_argument('--conv_type', type=str,
+                        help='type of convolution')
+    enc_parser.add_argument('--batch_size', type=int,
+                        help='Training batch size')
+    enc_parser.add_argument('--n_layers', type=int,
+                        help='Number of graph conv layers')
+    enc_parser.add_argument('--hidden_dim', type=int,
+                        help='Training hidden size')
+    enc_parser.add_argument('--dropout', type=float,
+                        help='Dropout rate')
+    enc_parser.add_argument('--n_batches', type=int,
+                        help='Number of training minibatches')
+    enc_parser.add_argument('--model_path', type=str,
+                        help='path to save/load model')
+    enc_parser.add_argument('--opt_scheduler', type=str,
+                        help='scheduler name')
+    enc_parser.add_argument('--node_anchored', action="store_true",
+                        help='whether to use node anchoring in training')
+    enc_parser.add_argument('--num_epoch', type=int,
+                        help='number of epochs')
+    enc_parser.add_argument('--depth', type=int,
+                        help='depth of the neighborhood')
+    
+    enc_parser.set_defaults(
+        conv_type='SAGE',
+        n_layers=8,
+        hidden_dim=64,
+        use_hetero=True,
+        depth=4,
+        
+        opt='adam',   # opt_enc_parser
+        opt_scheduler='none',
+        opt_restart=100,
+        weight_decay=0.0,
+        lr=1e-4,
+        num_epoch = 300,
+        
+        n_workers=4,
+        model_path="ckpt/degree_model.pt",
+        dropout=0.0
     )
 
-    #return cnt_parser.parse_args(arg_str)
 
 def parse_gossip(parser, arg_str=None):
     gos_parser = parser.add_argument_group()
@@ -124,73 +109,36 @@ def parse_gossip(parser, arg_str=None):
         use_log = True
     )
 
-def parse_encoder(parser, arg_str=None):
-    enc_parser = parser.add_argument_group()
-    #utils.parse_optimizer(parser)
+def parse_optimizer(parser):
+    opt_parser = parser.add_argument_group()
 
-    enc_parser.add_argument('--conv_type', type=str,
-                        help='type of convolution')
-    enc_parser.add_argument('--method_type', type=str,
-                        help='type of embedding')
-    enc_parser.add_argument('--batch_size', type=int,
-                        help='Training batch size')
-    enc_parser.add_argument('--n_layers', type=int,
-                        help='Number of graph conv layers')
-    enc_parser.add_argument('--hidden_dim', type=int,
-                        help='Training hidden size')
-    # enc_parser.add_argument('--skip', type=str,
-    #                     help='"all" or "last"')
-    enc_parser.add_argument('--dropout', type=float,
-                        help='Dropout rate')
-    enc_parser.add_argument('--n_batches', type=int,
-                        help='Number of training minibatches')
-    enc_parser.add_argument('--margin', type=float,
-                        help='margin for loss')
-    enc_parser.add_argument('--dataset', type=str,
-                        help='Dataset')
-    enc_parser.add_argument('--test_set', type=str,
-                        help='test set filename')
-    enc_parser.add_argument('--eval_interval', type=int,
-                        help='how often to eval during training')
-    enc_parser.add_argument('--val_size', type=int,
-                        help='validation set size')
-    enc_parser.add_argument('--model_path', type=str,
-                        help='path to save/load model')
-    enc_parser.add_argument('--opt_scheduler', type=str,
-                        help='scheduler name')
-    enc_parser.add_argument('--node_anchored', action="store_true",
-                        help='whether to use node anchoring in training')
-    enc_parser.add_argument('--test', action="store_true")
-    enc_parser.add_argument('--n_workers', type=int)
-    enc_parser.add_argument('--tag', type=str,
-        help='tag to identify the run')
+    opt_parser.add_argument('--train_dataset', type=str,
+                        help='name of the training dataset')
+    opt_parser.add_argument('--test_dataset', type=str,
+                        help='name of the test dataset')
+    opt_parser.add_argument('--gpu', type=int,
+                        help='which gpu to use')
 
-    enc_parser.add_argument('--use_centrality', type=bool)
 
-    enc_parser.set_defaults(conv_type='SAGE',
-                        method_type='order',
-                        dataset='syn',
-                        n_layers=8,
-                        batch_size=64,
-                        hidden_dim=64,
-                        dropout=0.0,
-                        n_batches=1000000,
-                        opt='adam',   # opt_enc_parser
-                        opt_scheduler='none',
-                        opt_restart=100,
-                        weight_decay=0.0,
-                        lr=1e-4,
-                        margin=0.1,
-                        test_set='',
-                        eval_interval=1000,
-                        n_workers=4,
-                        model_path="ckpt/degree_model.pt",
-                        tag='',
-                        val_size=4096,
-                        node_anchored=True,
-                        # skip="learnable",
-                        use_centrality=False
-                        )
+    opt_parser.add_argument('--opt', dest='opt', type=str,
+            help='Type of optimizer')
+    opt_parser.add_argument('--opt-scheduler', dest='opt_scheduler', type=str,
+            help='Type of optimizer scheduler. By default none')
+    opt_parser.add_argument('--opt-restart', dest='opt_restart', type=int,
+            help='Number of epochs before restart (by default set to 0 which means no restart)')
+    opt_parser.add_argument('--opt-decay-step', dest='opt_decay_step', type=int,
+            help='Number of epochs before decay')
+    opt_parser.add_argument('--opt-decay-rate', dest='opt_decay_rate', type=float,
+            help='Learning rate decay ratio')
+    opt_parser.add_argument('--lr', dest='lr', type=float,
+            help='Learning rate.')
+    opt_parser.add_argument('--clip', dest='clip', type=float,
+            help='Gradient clipping.')
+    opt_parser.add_argument('--weight_decay', type=float,
+            help='Optimizer weight decay.')
 
-    #return enc_parser.parse_args(arg_str)
-
+    opt_parser.set_defaults(
+        train_dataset='COX2',
+        test_dataset='ENZYMES',
+        gpu=0
+    )

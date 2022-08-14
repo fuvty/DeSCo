@@ -241,7 +241,30 @@ class Workload():
             self.neighborhood_dataset.apply_truth_from_dataset(self.canonical_count_truth)
             self.gossip_dataset.apply_truth_from_dataset(self.canonical_count_truth)
 
-    def compute_groundtruth(self, query_ids, num_workers= 4):
+    def load_groundtruth(self, query_ids):
+        '''
+        load ground truth from file if exist;
+        if file does not exist, return false
+        '''
+        # TODO: allow load partial ground truth
+        folder_path = os.path.join(self.root, 'CanonicalCountTruth')
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
+        if os.path.exists(os.path.join(folder_path, file_name)):
+            return torch.load(os.path.join(folder_path, file_name))
+        else:
+            raise NotImplementedError
+
+    def exist_groundtruth(self, query_ids):
+        '''
+        check if ground truth exists
+        '''
+        folder_path = os.path.join(self.root, 'CanonicalCountTruth')
+        file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
+        return os.path.exists(os.path.join(folder_path, file_name))
+
+    def compute_groundtruth(self, query_ids, num_workers= 4, save_to_file= True):
         # convert dataset
         if self.nx_targets is None:
             self.nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
@@ -302,7 +325,14 @@ class Workload():
                     count_node.append(count)
                 count_motif.append(count_node)
         count_motif = torch.tensor(count_motif)
-        self.canonical_count_truth = count_motif
+        # self.canonical_count_truth = count_motif
+
+        if save_to_file:
+            folder_path = os.path.join(self.root, 'CanonicalCountTruth')
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+            file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
+            torch.save(count_motif, os.path.join(folder_path, file_name))
 
         return count_motif
 

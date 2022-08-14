@@ -32,11 +32,11 @@ class NeighborhoodCountingModel(pl.LightningModule):
     def __init__(self, input_dim, hidden_dim, args, **kwargs):
         '''
         init the model using the following args:
-        hidden_dim: the hidden dimension of the model
-        dropout: dropout rate
         n_layers: number of layers
+        hidden_dim: the hidden dimension of the model
         conv_type: type of convolution
         use_hetero: whether to use heterogeneous convolution
+        dropout: dropout rate; WARNING: dropout is not used in the model
         optional args:
         baseline: the baseline model to use, choose from ["DIAMNet"]
         '''
@@ -63,11 +63,11 @@ class NeighborhoodCountingModel(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         loss = self.test_forward(batch, batch_idx)
-        self.log('test_loss', loss, batch_size=64)
+        self.log('neighborhood_counting_test_loss', loss, batch_size=64)
 
     def validation_step(self, batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
-        self.log('val_loss', loss, batch_size=64)
+        self.log('neighborhood_counting_val_loss', loss, batch_size=64)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
@@ -220,11 +220,11 @@ class GossipCountingModel(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
-        self.log('test_loss', loss, batch_size=64)
+        self.log('gossip_counting_test_loss', loss, batch_size=64)
 
     def validation_step(self, batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
-        self.log('val_loss', loss, batch_size=64)
+        self.log('gossip_counting_val_loss', loss, batch_size=64)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)

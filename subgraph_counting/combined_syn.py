@@ -108,7 +108,7 @@ def get_generator(sizes, size_prob=None, dataset_len=None):
         BAGenerator(sizes, size_prob=size_prob),
         PowerLawClusterGenerator(sizes, size_prob=size_prob),
         # BAGenerator([s for s in range(max_size, 5*max_size, 5)], max_p= 0.1, m_scale= 1,size_prob=size_prob),
-        PowerLawClusterGenerator([s for s in range(max_size, 5*max_size)], max_triangle_prob= 0.25, m_scale= 1, size_prob=size_prob)
+        # PowerLawClusterGenerator([s for s in range(max_size, 5*max_size)], max_triangle_prob= 0.25, m_scale= 1, size_prob=size_prob)
         ],
         gen_prob=gen_prob,
         dataset_len=dataset_len)
