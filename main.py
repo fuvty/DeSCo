@@ -5,7 +5,6 @@ parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(parentdir)
 
 import argparse
-from ctypes.wintypes import INT
 from typing import List, Optional, Tuple, Union
 
 import networkx as nx
@@ -43,7 +42,7 @@ if __name__ == "__main__":
 
     # define workload
     # TODO: add valid set mask support
-    train_dataset = load_data(train_dataset_name, n_neighborhoods=6400)
+    train_dataset = load_data(train_dataset_name)
     test_dataset = load_data(test_dataset_name)
     
     train_workload = Workload(train_dataset, 'data/'+train_dataset_name, hetero_graph=True)

@@ -45,7 +45,7 @@ def parse_neighborhood(parser, arg_str=None):
         num_epoch = 300,
         
         n_workers=4,
-        model_path="ckpt/degree_model.pt",
+        model_path="ckpt/neighborhood",
         dropout=0.0
     )
 
@@ -99,7 +99,7 @@ def parse_gossip(parser, arg_str=None):
         hidden_dim=64,
         dropout=0.0,
         n_workers=4,
-        model_path="ckpt/general/gossip/pfconv_345_syn_qs_L2_ON_sage_main_model_epo150.pt",
+        model_path="ckpt/gossip",
         # model_path="ckpt/general/gossip/tmp.pt",
         lr= 1e-3,
         num_epoch = 50,
@@ -117,28 +117,28 @@ def parse_optimizer(parser):
     opt_parser.add_argument('--test_dataset', type=str,
                         help='name of the test dataset')
     opt_parser.add_argument('--gpu', type=int,
-                        help='which gpu to use')
+                        help='the id of gpu to use')
 
 
-    opt_parser.add_argument('--opt', dest='opt', type=str,
-            help='Type of optimizer')
-    opt_parser.add_argument('--opt-scheduler', dest='opt_scheduler', type=str,
-            help='Type of optimizer scheduler. By default none')
-    opt_parser.add_argument('--opt-restart', dest='opt_restart', type=int,
-            help='Number of epochs before restart (by default set to 0 which means no restart)')
-    opt_parser.add_argument('--opt-decay-step', dest='opt_decay_step', type=int,
-            help='Number of epochs before decay')
-    opt_parser.add_argument('--opt-decay-rate', dest='opt_decay_rate', type=float,
-            help='Learning rate decay ratio')
-    opt_parser.add_argument('--lr', dest='lr', type=float,
-            help='Learning rate.')
-    opt_parser.add_argument('--clip', dest='clip', type=float,
-            help='Gradient clipping.')
-    opt_parser.add_argument('--weight_decay', type=float,
-            help='Optimizer weight decay.')
+#     opt_parser.add_argument('--opt', dest='opt', type=str,
+#             help='Type of optimizer')
+#     opt_parser.add_argument('--opt-scheduler', dest='opt_scheduler', type=str,
+#             help='Type of optimizer scheduler. By default none')
+#     opt_parser.add_argument('--opt-restart', dest='opt_restart', type=int,
+#             help='Number of epochs before restart (by default set to 0 which means no restart)')
+#     opt_parser.add_argument('--opt-decay-step', dest='opt_decay_step', type=int,
+#             help='Number of epochs before decay')
+#     opt_parser.add_argument('--opt-decay-rate', dest='opt_decay_rate', type=float,
+#             help='Learning rate decay ratio')
+#     opt_parser.add_argument('--lr', dest='lr', type=float,
+#             help='Learning rate.')
+#     opt_parser.add_argument('--clip', dest='clip', type=float,
+#             help='Gradient clipping.')
+#     opt_parser.add_argument('--weight_decay', type=float,
+#             help='Optimizer weight decay.')
 
     opt_parser.set_defaults(
-        train_dataset='COX2',
+        train_dataset='syn_6400',
         test_dataset='ENZYMES',
         gpu=0
     )

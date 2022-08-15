@@ -1,3 +1,4 @@
+from math import ceil
 import os
 import sys
 
@@ -7,6 +8,7 @@ sys.path.append(parentdir)
 import gzip
 import multiprocessing as mp
 import random
+from collections import defaultdict
 from typing import Callable, List, Optional, Tuple, Union
 
 import networkx as nx
@@ -28,6 +30,29 @@ from torch_geometric.datasets import Entities, Planetoid, TUDataset
 from tqdm import tqdm
 
 from subgraph_counting import combined_syn
+
+
+def gen_query_ids(query_size: List[int]) -> List[int]:
+    '''
+    input: query_size, a list of query size
+    output: query_ids, a list of query ids
+    '''
+    if max(query_size) > 5:
+        raise NotImplementedError
+    query_ids = defaultdict(list)
+    for i in range(6,53): # range(6,8): 3-node graphs, range(13,19): 4-node graphs, range(29,53): 5-node graphs
+        g = nx.graph_atlas(i)
+        if nx.is_connected(g):
+            query_ids[len(g)].append(i)
+
+    return_ids = []
+
+    for size, ids in query_ids.items():
+        if size in query_size:
+            return_ids.extend(ids)
+
+    return return_ids
+
 
 def SymmetricFactor(graph: nx.Graph) -> int:
     '''
@@ -75,26 +100,10 @@ def load_data(dataset_name: str, n_neighborhoods= -1, transform= None):
     elif dataset_name == 'ZINC':
         raise NotImplementedError
         # dataset = MoleculeDataset(root='data/ZINC', name='ZINC', transform= transform)
-    elif dataset_name == "syn":
+    elif dataset_name.split('_')[0] == "syn":
         min_size = 5
         max_size = 41
-        data_source = OTFSynCanonicalDataSource(min_size=min_size, max_size=max_size, canonical_anchored= True)
-        # graph_num = n_neighborhoods
-        graph_num = n_neighborhoods
-        dataset = data_source.gen_data_loaders(graph_num, graph_num,
-        train=True, use_distributed_sampling=False)
-        dataset = next(iter(dataset)).G
-        # add trival graphs
-        for i in range(10):
-            dataset += [nx.graph_atlas(i) for i in (3,6,7)]
-        random.shuffle(dataset)
-        if transform is not None:
-            new_dataset = []
-            for graph in dataset:
-                new_dataset.append(transform(pyg.utils.from_networkx(graph)))
-            dataset = new_dataset
-        else:
-            dataset = [pyg.utils.from_networkx(graph) for graph in dataset]
+        dataset = SyntheticDataset(min_size=min_size, max_size=max_size, graph_num= int(dataset_name.split('_')[1]), root='data/{}'.format(dataset_name), transform= transform)
     else:
         print(dataset_name)
         raise NotImplementedError
@@ -289,29 +298,37 @@ def sample_graphlet(graphs, *args, **kwargs):
         graph = pyg_utils.to_networkx(graph, to_undirected=True)
     return graph 
 
-class DataSource:
-    def gen_batch(batch_target, batch_neg_target, batch_neg_query, train):
-        raise NotImplementedError
-class OTFSynCanonicalDataSource(DataSource):
-    """ On-the-fly generated synthetic data for training the subgraph model.
-
-    At every iteration, new batch of graphs are generated with a pre-defined generator
-
-    DeepSNAP transforms are used to generate the positive and negative examples.
-    """
-    def __init__(self, max_size=29, min_size=5, n_workers=4,
-        max_queue_size=256, canonical_anchored=False):
-        self.closed = False
+class SyntheticDataset(InMemoryDataset):
+    '''
+    dataset generated with mixed generators
+    '''
+    def __init__(self, min_size: int = 4, max_size: int = 40, graph_num: int = 128, root: Optional[str] = None, transform: Optional[Callable] = None, pre_transform: Optional[Callable] = None, pre_filter: Optional[Callable] = None):
         self.max_size = max_size
         self.min_size = min_size
-        self.canonica_anchored = canonical_anchored
-        self.generator = combined_syn.get_generator(np.arange(
-            self.min_size + 1, self.max_size + 1))
+        self.graph_num = graph_num
 
+        self.name = 'Synthetic_size_min_{:d}_max_{:d}_graph_num_{:d}'.format(self.min_size, self.max_size, self.graph_num)
         self.sizes = [s for s in range(self.min_size + 1, self.max_size + 1)]
 
-    def gen_nx(self):
-        return self.generator.generate(size=random.choice(self.sizes))
+        # save as InMemoryDataset
+        super().__init__(root, transform, pre_transform, pre_filter)
+        self.data, self.slices = torch.load(self.processed_paths[0])
+
+    @property
+    def raw_file_names(self) -> Union[str, List[str], Tuple]:
+        '''
+        A list of files in the raw_dir which needs to be found in order to skip the download.
+        '''
+        edgelist_file_name = '{}_edgelist.txt'.format(self.name)
+        graph_indicator_file_name = '{}_graph_indicator.txt'.format(self.name)
+        return [edgelist_file_name, graph_indicator_file_name] # can be used by calling self.raw_paths
+
+    @property
+    def processed_file_names(self) -> Union[str, List[str], Tuple]:
+        '''
+        A list of files in the processed_dir which needs to be found in order to skip the processing.
+        '''
+        return ['{}_data.pt'.format(self.name)] # can be used by calling self.processed_paths
 
     def gen_data_loaders(self, size, batch_size, train=True,
         use_distributed_sampling=False):
@@ -319,54 +336,92 @@ class OTFSynCanonicalDataSource(DataSource):
 
         dataset = combined_syn.get_dataset("graph", size,
             np.arange(self.min_size + 1, self.max_size + 1))
-        sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset, num_replicas=hvd.size(), rank=hvd.rank()) if \
-                use_distributed_sampling else None
+        sampler = torch.utils.data.distributed.DistributedSampler(dataset, num_replicas=hvd.size(), rank=hvd.rank()) if use_distributed_sampling else None
         loader = TorchDataLoader(dataset,
             collate_fn=Batch.collate([]), batch_size=batch_size,
             sampler=sampler, shuffle=False)
 
         return loader
 
-    def gen_batch(self, batch_target, batch_neg_target, query,
-        train=True):
+    def download(self):
+        '''
+        Generate raw data and save to disk.
+        '''
+        # define synthetic generators
+        self.generator = combined_syn.get_generator(np.arange(self.min_size + 1, self.max_size + 1))
         
-        augmenter = feature_preprocess.FeatureAugment()
+        # generate graphs
+        dataset = self.gen_data_loaders(self.graph_num, self.graph_num,
+        train=True, use_distributed_sampling=False)
+        dataset = next(iter(dataset)).G
 
-        pos_target = batch_target
-        pos_target, pos_query = pos_target.apply_transform_multi(sample_neigh_canonical)
-        neg_target = batch_neg_target
-        # TODO: use hard negs
-        hard_neg_idxs = set(random.sample(range(len(neg_target.G)),
-            int(len(neg_target.G) * 1/2)))
-        #hard_neg_idxs = set()
-        batch_neg_query = Batch.from_data_list(
-            [DSGraph(self.generator.generate(size=len(g))
-                if i not in hard_neg_idxs else g)
-                for i, g in enumerate(neg_target.G)])
-        for i, g in enumerate(batch_neg_query.G):
-            g.graph["idx"] = i
-        _, neg_query = batch_neg_query.apply_transform_multi(sample_canonical,
-            hard_neg_idxs=hard_neg_idxs)
-        if self.canonica_anchored:
-            def add_anchor(g, anchors=None):
-                if anchors is not None:
-                    anchor = anchors[g.G.graph["idx"]]
-                else:
-                    anchor = random.choice(list(g.G.nodes))
-                for v in g.G.nodes:
-                    if "node_feature" not in g.G.nodes[v]:
-                        g.G.nodes[v]["node_feature"] = (torch.ones(1) if anchor == v
-                            else torch.zeros(1))
-                return g
-            neg_target = neg_target.apply_transform(add_anchor)
-        pos_target = augmenter.augment(pos_target).to(utils.get_device())
-        pos_query = augmenter.augment(pos_query).to(utils.get_device())
-        neg_target = augmenter.augment(neg_target).to(utils.get_device())
-        neg_query = augmenter.augment(neg_query).to(utils.get_device())
-        #print(len(pos_target.G[0]), len(pos_query.G[0]))
-        return pos_target, pos_query, neg_target, neg_query
+        # add trival graphs of size 2 and 3 with prob 1E-3
+        # for i in range(ceil(1E-3*float(self.graph_num))):
+        #     dataset += [nx.graph_atlas(i) for i in (3,6,7)]
 
+        random.shuffle(dataset)
+
+        # merge all networkx graphs into one large graph
+        init_node = 0
+        for i in range(len(dataset)):
+            dataset[i] = nx.convert_node_labels_to_integers(dataset[i], ordering="sorted", first_label=init_node)
+            init_node += len(dataset[i])
+
+        # save edgelist
+        edgelist_file_name = '{}_edgelist.txt'.format(self.name)
+        edgelist_file_path = os.path.join(self.raw_dir, edgelist_file_name)
+        with open(edgelist_file_path, 'w') as f:
+            f.write('# {:d} {:d}\n'.format(sum([len(g.nodes) for g in dataset]), sum([len(g.edges) for g in dataset])))
+            for i in range(len(dataset)):
+                for edge in dataset[i].edges:
+                    f.write('{} {}\n'.format(edge[0], edge[1]))
+
+        # save graph indicator
+        graph_indicator_file_name = '{}_graph_indicator.txt'.format(self.name)
+        graph_indicator_file_path = os.path.join(self.raw_dir, graph_indicator_file_name)
+        with open(graph_indicator_file_path, 'w') as f:
+            f.write('# {:d}\n'.format(len(dataset)))
+            for i in range(len(dataset)):
+                f.write('{:d}\n'.format(len(dataset[i].edges)))
+
+    def process(self):
+        # read graph indicator
+        graph_indicator_edge_num = []
+        with open(self.raw_paths[1], 'rt') as f:
+            for line in f:
+                if not line.startswith("#"):
+                    graph_indicator_edge_num.append(int(line.strip('\n')))
+
+        dataset_nx = [nx.Graph(directed=False) for _ in range(len(graph_indicator_edge_num))]
+
+        # read edgelist
+        gid = 0
+        eid = 0
+        edge_list = []
+        with open(self.raw_paths[0], 'rt') as f:
+            for line in f:
+                if not line.startswith("#"):
+                    splitted = line.strip('\n').split()
+                    from_node = int(splitted[0])
+                    to_node   = int(splitted[1])
+                    edge_list.append((from_node, to_node))
+                    eid += 1
+                    if eid == graph_indicator_edge_num[gid]:
+                        dataset_nx[gid].add_edges_from(edge_list)
+                        edge_list = []
+                        gid += 1
+                        eid = 0
+
+        data_list = [pyg.utils.from_networkx(nx_graph) for nx_graph in dataset_nx]
+
+        if self.pre_filter is not None:
+            data_list = [data for data in data_list if self.pre_filter(data)]
+
+        if self.pre_transform is not None:
+            data_list = [self.pre_transform(data) for data in data_list]
+
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])
 
 class P2P(InMemoryDataset):
     '''
