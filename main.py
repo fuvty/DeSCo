@@ -6,7 +6,7 @@ sys.path.append(parentdir)
 
 import argparse
 from typing import List, Optional, Tuple, Union
-
+import pandas as pd
 import networkx as nx
 import numpy as np
 import pytorch_lightning as pl
@@ -21,7 +21,7 @@ from subgraph_counting.lightning_model import (GossipCountingModel,
                                                NeighborhoodCountingModel)
 from subgraph_counting.workload import Workload
 
-if __name__ == "__main__":
+def main():
     # load parameters
     parser = argparse.ArgumentParser(description='Neighborhood embedding arguments')
     parse_optimizer(parser)
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     train_workload = Workload(train_dataset, 'data/'+train_dataset_name, hetero_graph=True)
     test_workload = Workload(test_dataset, 'data/'+test_dataset_name, hetero_graph=True)
 
-    # add this line when you need to compute ground truth
+    # compute ground truth if not any
     query_ids = gen_query_ids([3,4,5])
     print('use queries with atlas ids:', query_ids)
     if train_workload.exist_groundtruth(query_ids=query_ids):
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     else:
         test_workload.canonical_count_truth = test_workload.compute_groundtruth(query_ids= query_ids, save_to_file= True)
 
-    # generate pipeline dataset
+    # generate pipeline dataset, including neighborhood dataset and gossip dataset
     train_workload.generate_pipeline_datasets(depth_neigh=args_neighborhood.depth)
     test_workload.generate_pipeline_datasets(depth_neigh=args_neighborhood.depth)
 
@@ -72,17 +72,15 @@ if __name__ == "__main__":
 
     # canonical count training
     neighborhood_model = NeighborhoodCountingModel(input_dim=1, hidden_dim=64, args=args_neighborhood)
-    if args_neighborhood.conv_type != 'TCONV':
-        neighborhood_model.to_hetero(tconv_target= False, tconv_query= False)
-    else:
-        neighborhood_model.to_hetero(tconv_target= True, tconv_query= True)
+    neighborhood_model.to_hetero(tconv_target= args_neighborhood.conv_type=='TCONV', tconv_query= args_neighborhood.conv_type=='TCONV')
 
     neighborhood_model.set_queries(query_ids)
 
-    neighborhood_trainer = pl.Trainer(max_epochs=args_neighborhood.num_epoch, accelerator="gpu", devices=[args_opt.gpu])
+    neighborhood_trainer = pl.Trainer(max_epochs=args_neighborhood.num_epoch, accelerator="gpu", devices=[args_opt.gpu], default_root_dir=args_neighborhood.model_path)
     # neighborhood_trainer.fit(neighborhood_model, datamodule=neighborhoood_dataloader)
     neighborhood_trainer.fit(model=neighborhood_model, train_dataloaders=neighborhood_train_dataloader, val_dataloaders=neighborhood_test_dataloader)
 
+    # test neighborhood counting model
     neighborhood_trainer.test(neighborhood_model, dataloaders=neighborhood_test_dataloader) 
 
     # canonical count inference
@@ -94,7 +92,7 @@ if __name__ == "__main__":
     # apply neighborhood count output to gossip dataset
     train_workload.apply_neighborhood_count(neighborhood_count_train)
     test_workload.apply_neighborhood_count(neighborhood_count_test)
-
+    
     input_dim = 1
     args_gossip.use_hetero = False
     gossip_model = GossipCountingModel(input_dim, 64, args_gossip, emb_channels= 64)
@@ -105,9 +103,24 @@ if __name__ == "__main__":
     gossip_train_dataloader = DataLoader(train_workload.gossip_dataset)
     gossip_test_dataloader = DataLoader(test_workload.gossip_dataset)
 
-    gossip_trainer = pl.Trainer(max_epochs=args_gossip.num_epoch, accelerator="gpu", devices=[args_opt.gpu])
+    gossip_trainer = pl.Trainer(max_epochs=args_gossip.num_epoch, accelerator="gpu", devices=[args_opt.gpu], default_root_dir=args_neighborhood.model_path)
     gossip_trainer.fit(model=gossip_model, train_dataloaders=gossip_train_dataloader, val_dataloaders=gossip_test_dataloader)
 
-    # gossip inference
+    # test gossip counting model
     gossip_trainer.test(gossip_model, dataloaders=gossip_test_dataloader)
     
+    # analyze graphlet results
+    analysis_name = args_neighborhood
+
+    neighborhood_count_test = torch.cat([neighborhood_model.graph_to_count(g) for g in neighborhood_test_dataloader], dim=0)
+    graphlet_neighborhood_count_test = test_workload.neighborhood_dataset.aggregate_neighborhood_count(neighborhood_count_test) # user can get the graphlet count of each graph in this way
+    pd.DataFrame(graphlet_neighborhood_count_test.cpu().numpy()).to_csv(os.path.join('results/raw_results', 'neighborhood_{}_{}'.format(args_neighborhood.conv_type, args_opt.test_dataset))) # save the inferenced results to csv file
+
+    gossip_count_test = torch.cat([gossip_model.graph_to_count(g) for g in gossip_test_dataloader], dim=0)
+    graphlet_gossip_count_test = test_workload.gossip_dataset.aggregate_neighborhood_count(gossip_count_test) # user can get the graphlet count of each graph in this way
+    pd.DataFrame(graphlet_gossip_count_test.cpu().numpy()).to_csv(os.path.join('results/raw_results', 'gossip_{}_{}'.format(args_gossip.conv_type, args_opt.test_dataset))) # save the inferenced results to csv file
+
+    print('done')
+
+if __name__ == "__main__":
+    main()

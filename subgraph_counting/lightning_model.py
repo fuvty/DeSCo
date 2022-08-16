@@ -99,9 +99,9 @@ class NeighborhoodCountingModel(pl.LightningModule):
             count = self.count_model(embs)
         return count
 
-    def graph_to_count(self, batch):
+    def graph_to_count(self, batch) -> torch.Tensor:
         '''
-        use 2^(pred+1) as the predition to test the model
+        use 2^(pred+1) as the predition to test the model, which is the groud truth canonical count
         use ReLu as the activation function to prevent the negative count
         '''
 
@@ -250,10 +250,23 @@ class GossipCountingModel(pl.LightningModule):
         
         loss = torch.sum(torch.stack(loss_queries))
         return loss
+    
+    def graph_to_count(self, batch, query_emb= None) -> torch.Tensor:
+        pred_results = []
+        for query_id in range(batch.x.shape[1]):
+            batch.node_feature = batch.x[:,query_id].view(-1,1)
+            if self.emb_with_query:
+                query_emb= self.query_emb[query_id, :].view(-1,1).detach().to(self.device) # with shape #query * feature_size, do not update query emb here
+            else:
+                query_emb= None
+            pred_counts = self.emb_model(batch, query_emb= query_emb)
+            pred_counts = pred_counts + torch.log2(batch.y[:,query_id]+1).view(-1,1)
+            pred_counts = 2**(pred_counts-1)
 
-    def embed_to_count(self, data, query_emb= None) -> torch.Tensor:
-        out_count = self.emb_model(data, query_emb= query_emb)
-        return out_count
+            pred_results.append(pred_counts)
+
+        pred_results = torch.cat(pred_results, dim=-1) # shape (#nodes, #queries)
+        return pred_results
 
     def criterion(self, count, truth):
         # regression

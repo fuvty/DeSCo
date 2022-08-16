@@ -1,12 +1,12 @@
 import os
 import sys
+
 parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(parentdir)
 
 import concurrent.futures
 import math
 import multiprocessing as mp
-
 import pickle
 import random
 import signal
@@ -19,19 +19,19 @@ from typing import List, Optional, Tuple, Union
 import deepsnap as ds
 import networkx as nx
 import numpy as np
+import pytorch_lightning as pl
 import torch
 import torch_geometric as pyg
 import torch_geometric.transforms as T
 from torch_geometric.loader import DataLoader
+from torch_scatter import segment_csr
 from tqdm import tqdm
 from tqdm.contrib import tzip
-import pytorch_lightning as pl
 
-from subgraph_counting.data import (count_canonical,
+from subgraph_counting.data import (SymmetricFactor, count_canonical,
                                     count_graphlet, get_neigh_canonical,
                                     get_neigh_hetero, load_data,
-                                    sample_graphlet, sample_neigh_canonical, 
-                                    SymmetricFactor)
+                                    sample_graphlet, sample_neigh_canonical)
 from subgraph_counting.transforms import (NetworkxToHetero, Relabel,
                                           RemoveSelfLoops)
 
@@ -81,20 +81,33 @@ class GossipDataset(pyg.data.InMemoryDataset):
         
         self.slices['x'] = self.slices['y']
 
+    def aggregate_neighborhood_count(self, count: torch.Tensor) -> torch.Tensor:
+        '''
+        aggregate count of neighborhoods to each graph, return tensor with shape (#graph, #query)
+        '''
+        def expand_left(ptr: torch.Tensor, dim: int, dims: int) -> torch.Tensor:
+            for _ in range(dims + dim if dim < 0 else dim):
+                ptr = ptr.unsqueeze(0)
+            return ptr
+        ptr = self.slices['y']
+        ptr = expand_left(ptr, 0, dims=count.dim())
+        return segment_csr(count, ptr, reduce='sum')
+        count_graphlet = scatter(count, ptr=self.slices['y'])
+        return count_graphlet
 
 class NeighborhoodDataset(pyg.data.InMemoryDataset):
     '''
     get a normal pyg dataset and transform it into a canonical neighborhood dataset to feed to dataloader.
     '''
-    def __init__(self, dataset, depth_neigh, root, nx_targets=None, transform=None, pre_transform=None, pre_filter=None, hetero_graph= True):
+    def __init__(self, dataset: pyg.data.dataset.Dataset, depth_neigh, root, nx_targets=None, transform=None, pre_transform=None, pre_filter=None, hetero_graph= True):
         self.nx_targets = nx_targets
         self.hetero_graph = hetero_graph
         self.dataset = dataset
         self.depth_neigh = depth_neigh
         super(NeighborhoodDataset, self).__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
-        self.nx_neighs_index = np.load(self.processed_paths[1])
-        self.nx_neighs_indicator = np.load(self.processed_paths[2])
+        self.nx_neighs_index = np.load(self.processed_paths[1]) # numpy 2D int array to show (graph_id, node_id) of each neighborhood, with shape (#neighborhood, 2)
+        self.nx_neighs_indicator = np.load(self.processed_paths[2]) # numpy bool array of shape (#n), indicating wheather the node is chosen as a neighborhood. size = #node in the dataset.
 
     @property
     def processed_file_names(self):
@@ -119,7 +132,7 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
             get_neigh_func = get_neigh_canonical
 
         nx_neighs_index = []
-        nx_neighs_indicator = [] # when iterating through nx_targets, indicate wheather the node is sampled as a neighborhood. size = #node in the dataset
+        nx_neighs_indicator = [] # when iterating through nx_targets, indicate wheather the node is chosen as a neighborhood. size = #node in the dataset
         nx_neighs = []
 
         # sample neighs
@@ -172,6 +185,18 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
         indicator: bool tensor with shape (#node), indicating weather the node is sampled for the neighborhood
         '''
         self.data.y = truth[self.nx_neighs_indicator,:]
+
+    def aggregate_neighborhood_count(self, count: torch.Tensor) -> torch.Tensor:
+        '''
+        use self.neighs_indicator to aggregate count of neighborhoods to each graph, return tensor with shape (#graph, #query)
+        '''
+        count = count.clone().cpu()
+        num_neighborhoods, num_queries = count.shape
+        graph_id = torch.tensor(self.nx_neighs_index[:,1], dtype=torch.long).cpu()
+        count_graphlet = torch.zeros((len(self.dataset), num_queries), dtype=torch.float, device='cpu')
+        count_graphlet.index_add_(dim=0, index=graph_id, source=count)
+
+        return count_graphlet
 
 def MatchSubgraphWorker(task):
     '''
@@ -265,6 +290,9 @@ class Workload():
         return os.path.exists(os.path.join(folder_path, file_name))
 
     def compute_groundtruth(self, query_ids, num_workers= 4, save_to_file= True):
+        '''
+        compute the ground truth canonical count for the given query_ids
+        '''
         # convert dataset
         if self.nx_targets is None:
             self.nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
