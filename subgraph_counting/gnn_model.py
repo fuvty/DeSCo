@@ -121,12 +121,6 @@ class BaseGNNCore(nn.Module):
         
         self.convs = nn.ModuleList()
 
-        # hand code
-        self.updates = nn.ModuleList()
-
-        if self.conv_type == "GIN":
-            self.eps = nn.ModuleList()
-        
         self.input_pattern_emb= False # init with false, if input_pattern_emb is in kwargs, then set to True
 
         for l in range(args.n_layers):
@@ -151,19 +145,6 @@ class BaseGNNCore(nn.Module):
                 self.convs.append(conv_model(hidden_input_dim, hidden_dim, emb_channels= emb_channels))
             else:
                 self.convs.append(conv_model(hidden_input_dim, hidden_dim, aggr='add'))
-                if self.conv_type == "SAGE":
-                    self.updates.append(nn.Linear(2*hidden_dim, hidden_dim))
-                elif self.conv_type == "GIN":
-                    self.updates.append(
-                        nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim))
-                    )
-                    self.eps.append(TrivalParam(0.0))
-                elif self.conv_type == "GCN":
-                    pass
-                elif self.conv_type == 'GAT':
-                    pass
-                else:
-                    raise NotImplementedError
 
         self.post_input_dim = hidden_dim * args.n_layers + pre_dim_out
 
@@ -235,16 +216,7 @@ class BaseGNNCore(nn.Module):
             if self.conv_type == "GOSSIP":
                 x = self.convs[i](x, edge_index, edge_weight= edge_weight, query_emb= query_emb)
             else:
-                x_neigh = self.convs[i](x, edge_index)
-                if self.conv_type == "SAGE":
-                    x = self.updates[i](torch.cat((x_neigh, x), dim=1))
-                elif self.conv_type == "GIN":
-                    x = self.updates[i](x_neigh + (1 + self.eps[i]() * x))
-                    # x = self.updates[i](x_neigh + (1 + 0.0) * x)
-                elif self.conv_type in ["GCN", "GAT"]:
-                    x = x_neigh
-                else:
-                    raise NotImplementedError
+                x = self.convs[i](x, edge_index)
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
             emb = torch.cat((emb, x), 1)
@@ -325,7 +297,8 @@ class SAGEConv(pyg_nn.MessagePassing):
         self.out_channels = out_channels
 
         self.lin = nn.Linear(in_channels, out_channels)
-        # self.lin_update = nn.Linear(out_channels + in_channels, out_channels)
+        self.lin_update = nn.Linear(out_channels + in_channels,
+            out_channels)
 
     def forward(self, x, edge_index, edge_weight=None, size=None,
                 res_n_id=None):
@@ -347,10 +320,9 @@ class SAGEConv(pyg_nn.MessagePassing):
         out = self.propagate(edge_index, size=size, x=x, edge_weight=edge_weight, res_n_id=res_n_id)
         out = self.lin(out)
 
-        # out = torch.cat([out, x[1]], dim=-1)
-        # return self.lin_update(out)
+        out = torch.cat([out, x[1]], dim=-1)
 
-        return out
+        return self.lin_update(out)
 
     def message(self, x_j, edge_weight):
         #return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
@@ -358,7 +330,17 @@ class SAGEConv(pyg_nn.MessagePassing):
 
     '''
     def update(self, aggr_out, x, res_n_id):
+        
+
         aggr_out = self.lin_update(aggr_out)
+        #aggr_out = torch.matmul(aggr_out, self.weight)
+
+        #if self.bias is not None:
+        #    aggr_out = aggr_out + self.bias
+
+        #if self.normalize:
+        #    aggr_out = F.normalize(aggr_out, p=2, dim=-1)
+
         return aggr_out
     '''
     
@@ -368,36 +350,38 @@ class SAGEConv(pyg_nn.MessagePassing):
     
     def reset_parameters(self):
         self.lin.reset_parameters()
-        # self.lin_update.reset_parameters()
+        self.lin_update.reset_parameters()
 
 class GINConv(pyg_nn.MessagePassing):
-    def __init__(self, nn: Callable, eps: float = 0., train_eps: bool = False,
-                 **kwargs):
-        kwargs.setdefault('aggr', 'add')
-        super().__init__(**kwargs)
+    def __init__(self, nn, eps=0, train_eps=False, **kwargs):
+        super(GINConv, self).__init__(aggr='add', **kwargs)
+        self.nn = nn
         self.initial_eps = eps
-        # if train_eps:
-        #     self.eps = torch.nn.Parameter(torch.Tensor([eps]))
-        # else:
-        #     self.register_buffer('eps', torch.Tensor([eps]))
-        
-    def forward(self, x, edge_index, size = None) -> Tensor:
-        if isinstance(x, Tensor):
-            x = (x, x)
+        if train_eps:
+            self.eps = torch.nn.Parameter(torch.Tensor([eps]))
+        else:
+            self.register_buffer('eps', torch.Tensor([eps]))
+        self.reset_parameters()
 
-        # propagate_type: (x: OptPairTensor)
-        out = self.propagate(edge_index, x=x, size=size)
+    def reset_parameters(self):
+        #reset(self.nn)
+        self.eps.data.fill_(self.initial_eps)
 
-        '''
-        x_r = x[1]
-        if x_r is not None:
-            out += (1 + self.eps) * x_r
-        '''
-
+    def forward(self, x, edge_index, edge_weight=None):
+        """"""
+        x = x.unsqueeze(-1) if x.dim() == 1 else x
+        edge_index, edge_weight = pyg_utils.remove_self_loops(edge_index,
+            edge_weight)
+        out = self.nn((1 + self.eps) * x + self.propagate(edge_index, x=x,
+            edge_weight=edge_weight))
         return out
 
-    def message(self, x_j: Tensor) -> Tensor:
-        return x_j
+    def message(self, x_j, edge_weight):
+        return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
+
+    def __repr__(self):
+        return '{}(nn={})'.format(self.__class__.__name__, self.nn)
+
 
 
 class TConv(pyg_nn.MessagePassing):
