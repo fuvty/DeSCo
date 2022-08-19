@@ -18,7 +18,7 @@ from subgraph_counting.gnn_model import BaseGNN
 from subgraph_counting.transforms import NetworkxToHetero
 from subgraph_counting.workload import graph_atlas_plus
 
-def gen_queries(query_ids, queries=None):
+def gen_queries(query_ids, queries=None, transform=None):
     # begin {query}, commonly used for all
     # convert nx_graph queries to pyg
     queries_pyg = [NetworkxToHetero(graph_atlas_plus(query_id), type_key= 'type', feat_key= 'feat') for query_id in query_ids]
@@ -26,6 +26,10 @@ def gen_queries(query_ids, queries=None):
     for query_pyg in queries_pyg:
         query_pyg['union_node'].node_feature = torch.zeros((query_pyg['union_node'].num_nodes, 1))
     # end {query}, commonly used for all
+
+    if transform is not None:
+        queries_pyg = [transform(query_pyg) for query_pyg in queries_pyg]
+
     return queries_pyg
 
 class NeighborhoodCountingModel(pl.LightningModule):
@@ -179,8 +183,8 @@ class NeighborhoodCountingModel(pl.LightningModule):
         loss = loss_regression
         return loss
 
-    def set_queries(self, query_ids, queries=None):
-        self.query_loader = DataLoader(gen_queries(query_ids, queries), batch_size= 64)
+    def set_queries(self, query_ids, queries=None, transform=None):
+        self.query_loader = DataLoader(gen_queries(query_ids, queries, transform=transform), batch_size= 64)
 
     def get_query_emb(self):
         emb_queries = []

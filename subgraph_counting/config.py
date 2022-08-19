@@ -23,8 +23,12 @@ def parse_neighborhood(parser, arg_str=None):
                         help='path to save/load model')
     enc_parser.add_argument('--opt_scheduler', type=str,
                         help='scheduler name')
-    enc_parser.add_argument('--node_anchored', action="store_true",
-                        help='whether to use node anchoring in training')
+    enc_parser.add_argument('--use_hetero', action="store_true",
+                        help='whether to use heterogeneous GNNs')
+    enc_parser.add_argument('--use_tconv', action="store_true",
+                        help='whether to use triangle convolution (a case of SHMP)')
+    enc_parser.add_argument('--zero_node_feat', action="store_true",
+                        help='whether to zero out node features')
     enc_parser.add_argument('--num_epoch', type=int,
                         help='number of epochs')
     enc_parser.add_argument('--depth', type=int,
@@ -35,6 +39,8 @@ def parse_neighborhood(parser, arg_str=None):
         n_layers=8,
         hidden_dim=64,
         use_hetero=True,
+        use_tconv=True,
+        zero_node_feat=True,
         depth=4,
         
         opt='adam',   # opt_enc_parser
@@ -119,6 +125,10 @@ def parse_optimizer(parser):
     opt_parser.add_argument('--gpu', type=int,
                         help='the id of gpu to use')
 
+    opt_parser.add_argument('--neighborhood_batch_size', type=int,
+                        help='batch size of neighborhood counting')
+    opt_parser.add_argument('--gossip_batch_size', type=int,
+                        help='batch size of gossip counting')
 
 #     opt_parser.add_argument('--opt', dest='opt', type=str,
 #             help='Type of optimizer')
@@ -140,5 +150,8 @@ def parse_optimizer(parser):
     opt_parser.set_defaults(
         train_dataset='syn_6400',
         test_dataset='ENZYMES',
-        gpu=0
+        gpu=0,
+
+        neighborhood_batch_size=64,
+        gossip_batch_size=64
     )

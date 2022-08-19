@@ -115,7 +115,7 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
 
     def process(self):
         '''
-        transform to canonical neighborhood
+        iterate through original dataset to get the canonical neighborhoods
         '''
         if self.nx_targets is None:
             nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
@@ -253,13 +253,13 @@ class Workload():
 
         self.nx_targets = None
 
-    def generate_pipeline_datasets(self, depth_neigh,transform=None, pre_transform=None, pre_filter=None):
+    def generate_pipeline_datasets(self, depth_neigh, neighborhood_transform=None, gossip_transform=None, pre_transform=None, pre_filter=None):
 
         # sample neigh and generate neighborhood dataset
-        self.neighborhood_dataset = NeighborhoodDataset(dataset= self.dataset, depth_neigh= depth_neigh, root= os.path.join(self.root, 'NeighborhoodDataset'), nx_targets= self.nx_targets, transform= transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
+        self.neighborhood_dataset = NeighborhoodDataset(dataset= self.dataset, depth_neigh= depth_neigh, root= os.path.join(self.root, 'NeighborhoodDataset'), nx_targets= self.nx_targets, transform= neighborhood_transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
         
         # generate gossip dataset
-        self.gossip_dataset = GossipDataset(dataset= self.dataset, root= os.path.join(self.root, 'GossipDataset'), transform= transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
+        self.gossip_dataset = GossipDataset(dataset= self.dataset, root= os.path.join(self.root, 'GossipDataset'), transform= gossip_transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
 
         # if groudtruth is given, apply it to neighborhood dataset and gossip dataset
         if len(self.canonical_count_truth) != 0:

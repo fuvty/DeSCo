@@ -413,6 +413,10 @@ class SyntheticDataset(InMemoryDataset):
                         eid = 0
 
         data_list = [pyg.utils.from_networkx(nx_graph) for nx_graph in dataset_nx]
+        
+        # init data_list with empty x
+        for i in range(len(data_list)):
+            data_list[i].x = torch.zeros(data_list[i].num_nodes, 1)
 
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]

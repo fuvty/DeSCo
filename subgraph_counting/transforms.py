@@ -7,12 +7,29 @@ import torch_geometric as pyg
 import torch_geometric.transforms as T
 import torch_geometric.utils as pyg_utils
 from torch import Tensor
-from torch_geometric.data import HeteroData
+from torch_geometric.data import HeteroData, Data, Batch
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.typing import EdgeType, NodeType, QueryType
 
+
+class ZeroNodeFeat(BaseTransform):
+    '''
+    set the node feature to zero
+    '''
+    def __init__(self, node_feat_name: str = 'x'):
+        self.node_feat_name = node_feat_name
+
+    def __call__(self, data: Data):
+        # assert type(data) == Union[Data, Batch]
+        
+        x = getattr(data, self.node_feat_name)
+        setattr(data, self.node_feat_name, torch.zeros_like(x))
+
+        return data
+    
 class ToTCONV(BaseTransform):
     '''
+    ALERT: only convert one types of node, use ToTCONVHetero to convert multiple types of node
     recommand call \'pyg_graph = T.ToUndirected()(pyg_graph)\' first
     a --> b
     |    /
