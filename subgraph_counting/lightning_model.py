@@ -4,7 +4,7 @@ import sys
 parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(parentdir)
 
-from typing import Tuple
+from typing import Tuple, Dict, Any
 
 import numpy as np
 import pytorch_lightning as pl
@@ -203,6 +203,16 @@ class NeighborhoodCountingModel(pl.LightningModule):
             self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union_triangle', 'union_node'), ('union_node', 'union_tride', 'union_node')] ), aggr='sum')
         else:
             self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union', 'union_node')] ), aggr='sum')
+    
+    def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
+        '''
+        convert the GNN model to heterogeneous model according to the checkpoint
+        '''
+        use_hetero = checkpoint['hyper_parameters']['args'].use_hetero
+        use_tconv = checkpoint['hyper_parameters']['args'].use_tconv
+        self = self.to_hetero(tconv_target=use_tconv, tconv_query=use_tconv) if use_hetero else self
+        return None
+
 
 
 class GossipCountingModel(pl.LightningModule):

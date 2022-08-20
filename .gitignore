@@ -13,6 +13,7 @@ results/
 orca/
 core
 /ckpt/
+/test/
 */workload/
 *_groundtruth.csv
 *.csv
