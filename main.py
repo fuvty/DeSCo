@@ -109,13 +109,13 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
     else:
         assert gossip_checkpoint is not None
         gossip_model = GossipCountingModel.load_from_checkpoint(gossip_checkpoint)
-    
     gossip_model.set_query_emb(neighborhood_model.get_query_emb())
+
+    gossip_trainer = pl.Trainer(max_epochs=args_gossip.num_epoch, accelerator="gpu", devices=[args_opt.gpu], default_root_dir=args_gossip.model_path)
 
     # train gossip model
     if train_gossip:
         gossip_train_dataloader = DataLoader(train_workload.gossip_dataset)
-        gossip_trainer = pl.Trainer(max_epochs=args_gossip.num_epoch, accelerator="gpu", devices=[args_opt.gpu], default_root_dir=args_gossip.model_path)
         gossip_trainer.fit(model=gossip_model, train_dataloaders=gossip_train_dataloader, val_dataloaders=gossip_test_dataloader)
 
     gossip_trainer.test(gossip_model, dataloaders=gossip_test_dataloader)
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     # debug; TODO: the following restrictions are added because of the limited implemented senarios
     assert args_neighborhood.use_hetero == True
 
-    neighborhood_checkpoint = 'test/neighborhood/lightning_logs/version_0/checkpoints/epoch=0-step=263.ckpt'
-    gossip_checkpoint = 'ckpt/gossip/lightning_logs/version_0/checkpoints/epoch=0-step=600.ckpt'
+    neighborhood_checkpoint = 'ckpt/neighborhood/lightning_logs/version_0/checkpoints/epoch=299-step=655800.ckpt'
+    gossip_checkpoint = 'test/gossip/lightning_logs/version_4/checkpoints/epoch=0-step=600.ckpt'
 
-    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= False, train_gossip= True, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint) 
+    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= False, train_gossip= False, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint) 

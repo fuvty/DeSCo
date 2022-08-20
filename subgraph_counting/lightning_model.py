@@ -221,9 +221,8 @@ class GossipCountingModel(pl.LightningModule):
         self.hidden_dim = hidden_dim
 
         kwargs['baseline'] = "gossip" # return all emb when forwarding
-        
-        # debug
-        self.emb_with_query = False
+
+        self.save_hyperparameters()
 
         self.emb_model = BaseGNN(input_dim, hidden_dim, 1, args, **kwargs) # output count
         self.kwargs = kwargs
@@ -253,10 +252,7 @@ class GossipCountingModel(pl.LightningModule):
 
         for query_id in range(batch.x.shape[1]):
             batch.node_feature = batch.x[:,query_id].view(-1,1)
-            if self.emb_with_query:
-                query_emb= self.query_emb[query_id, :].view(-1,1).detach().to(self.device) # with shape #query * feature_size, do not update query emb here
-            else:
-                query_emb= None
+            query_emb= self.query_emb[query_id, :].view(1,-1).detach().to(self.device) # with shape #query * feature_size, do not update query emb here; used by GossipConv
             pred_counts = self.emb_model(batch, query_emb= query_emb)
             pred_counts = pred_counts + torch.log2(batch.y[:,query_id]+1).view(-1,1)
             loss = self.criterion(2**(pred_counts-1), batch.y[:,query_id].view(-1,1)) # pred diff
@@ -269,10 +265,7 @@ class GossipCountingModel(pl.LightningModule):
         pred_results = []
         for query_id in range(batch.x.shape[1]):
             batch.node_feature = batch.x[:,query_id].view(-1,1)
-            if self.emb_with_query:
-                query_emb= self.query_emb[query_id, :].view(-1,1).detach().to(self.device) # with shape #query * feature_size, do not update query emb here
-            else:
-                query_emb= None
+            query_emb= self.query_emb[query_id, :].view(1,-1).detach().to(self.device) # with shape #query * feature_size, do not update query emb here; used by GossipConv
             pred_counts = self.emb_model(batch, query_emb= query_emb)
             pred_counts = pred_counts + torch.log2(batch.y[:,query_id]+1).view(-1,1)
             pred_counts = 2**(pred_counts-1)

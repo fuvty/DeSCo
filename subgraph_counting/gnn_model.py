@@ -250,6 +250,7 @@ class GossipConv(pyg_nn.MessagePassing):
     def message(self, x_i, x_j, edge_weight, query_emb: Union[torch.Tensor, None]):
         if query_emb is None:
             gate = 0.5
+            warnings.warn("lack query embed, use 0.5 for all queries.")
         else:
             gate = self.lin_gate(query_emb)
         edge_msg = self.lin_com(x_j)
