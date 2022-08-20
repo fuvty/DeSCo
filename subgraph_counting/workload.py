@@ -99,7 +99,7 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
     '''
     get a normal pyg dataset and transform it into a canonical neighborhood dataset to feed to dataloader.
     '''
-    def __init__(self, dataset: pyg.data.dataset.Dataset, depth_neigh, root, nx_targets=None, transform=None, pre_transform=None, pre_filter=None, hetero_graph= True):
+    def __init__(self, depth_neigh, root, dataset: pyg.data.dataset.Dataset = None, nx_targets=None, transform=None, pre_transform=None, pre_filter=None, hetero_graph= True):
         self.nx_targets = nx_targets
         self.hetero_graph = hetero_graph
         self.dataset = dataset
@@ -117,6 +117,9 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
         '''
         iterate through original dataset to get the canonical neighborhoods
         '''
+        if self.dataset is None:
+            raise AttributeError('must create Neighborhood dataset with a PyG dataset')
+
         if self.nx_targets is None:
             nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
             self.nx_targets = nx_targets
@@ -188,12 +191,17 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
 
     def aggregate_neighborhood_count(self, count: torch.Tensor) -> torch.Tensor:
         '''
-        use self.neighs_indicator to aggregate count of neighborhoods to each graph, return tensor with shape (#graph, #query)
+        use self.neighs_indicator to aggregate count of neighborhoods to each graph
+        input: 
+            canonical count: tensor with shape (#node, #query)
+        output: 
+            graphlet count tensor with shape (#graph, #query)
         '''
         count = count.clone().cpu()
         num_neighborhoods, num_queries = count.shape
-        graph_id = torch.tensor(self.nx_neighs_index[:,1], dtype=torch.long).cpu()
-        count_graphlet = torch.zeros((len(self.dataset), num_queries), dtype=torch.float, device='cpu')
+        num_graphs = max(self.nx_neighs_index[:,0])+1 if self.dataset is None else len(self.dataset)
+        graph_id = torch.tensor(self.nx_neighs_index[:,0], dtype=torch.long).cpu()
+        count_graphlet = torch.zeros((num_graphs, num_queries), dtype=torch.float, device='cpu')
         count_graphlet.index_add_(dim=0, index=graph_id, source=count)
 
         return count_graphlet
@@ -256,7 +264,7 @@ class Workload():
     def generate_pipeline_datasets(self, depth_neigh, neighborhood_transform=None, gossip_transform=None, pre_transform=None, pre_filter=None):
 
         # sample neigh and generate neighborhood dataset
-        self.neighborhood_dataset = NeighborhoodDataset(dataset= self.dataset, depth_neigh= depth_neigh, root= os.path.join(self.root, 'NeighborhoodDataset'), nx_targets= self.nx_targets, transform= neighborhood_transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
+        self.neighborhood_dataset = NeighborhoodDataset(depth_neigh= depth_neigh, root= os.path.join(self.root, 'NeighborhoodDataset'), dataset= self.dataset,nx_targets= self.nx_targets, transform= neighborhood_transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
         
         # generate gossip dataset
         self.gossip_dataset = GossipDataset(dataset= self.dataset, root= os.path.join(self.root, 'GossipDataset'), transform= gossip_transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
