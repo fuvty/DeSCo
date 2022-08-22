@@ -4,8 +4,9 @@ import sys
 parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(parentdir)
 
-from typing import Tuple, Dict, Any
+from typing import Any, Dict, Tuple, List
 
+import networkx as nx
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -18,10 +19,16 @@ from subgraph_counting.gnn_model import BaseGNN
 from subgraph_counting.transforms import NetworkxToHetero
 from subgraph_counting.workload import graph_atlas_plus
 
-def gen_queries(query_ids, queries=None, transform=None):
+
+def gen_queries(query_ids: List[int], queries=None, transform=None) -> Tuple[List[pyg.data.data.Data], List[nx.Graph]]:
+    '''
+    generate queries according to the atlas ids
+    return a list of PyG graphs and a list of networkx graphs
+    '''
     # begin {query}, commonly used for all
     # convert nx_graph queries to pyg
-    queries_pyg = [NetworkxToHetero(graph_atlas_plus(query_id), type_key= 'type', feat_key= 'feat') for query_id in query_ids]
+    queries_nx = [graph_atlas_plus(query_id) for query_id in query_ids]
+    queries_pyg = [NetworkxToHetero(query, type_key= 'type', feat_key= 'feat') for query in queries_nx]
     
     for query_pyg in queries_pyg:
         query_pyg['union_node'].node_feature = torch.zeros((query_pyg['union_node'].num_nodes, 1))
@@ -30,7 +37,7 @@ def gen_queries(query_ids, queries=None, transform=None):
     if transform is not None:
         queries_pyg = [transform(query_pyg) for query_pyg in queries_pyg]
 
-    return queries_pyg
+    return queries_pyg, queries_nx
 
 class NeighborhoodCountingModel(pl.LightningModule):
     def __init__(self, input_dim, hidden_dim, args, **kwargs):
@@ -184,7 +191,11 @@ class NeighborhoodCountingModel(pl.LightningModule):
         return loss
 
     def set_queries(self, query_ids, queries=None, transform=None):
-        self.query_loader = DataLoader(gen_queries(query_ids, queries, transform=transform), batch_size= 64)
+        queries_pyg, queries_nx = gen_queries(query_ids, queries, transform=transform)
+        min_len_neighbor =  max(nx.diameter(query) for query in queries_nx)
+        if self.args.depth < min_len_neighbor:
+            raise ValueError("neighborhood diameter {:d} is too small for the queries, the minimum is {:d}".format(self.args.depth, min_len_neighbor))
+        self.query_loader = DataLoader(queries_pyg, batch_size= 64)
 
     def get_query_emb(self):
         emb_queries = []
