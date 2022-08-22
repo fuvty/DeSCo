@@ -1,8 +1,6 @@
 import os
 import sys
 
-from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
-
 parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(parentdir)
 
@@ -15,6 +13,7 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+import torch.nn.functional as F
 import torch_geometric as pyg
 import torch_geometric.transforms as T
 from torch_geometric.loader import DataLoader
@@ -24,6 +23,7 @@ from subgraph_counting.config import (parse_gossip, parse_neighborhood,
 from subgraph_counting.data import gen_query_ids, load_data
 from subgraph_counting.lightning_model import (GossipCountingModel,
                                                NeighborhoodCountingModel)
+from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
 from subgraph_counting.workload import Workload
 
 
@@ -125,11 +125,11 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
 
     neighborhood_count_test = torch.cat([neighborhood_model.graph_to_count(g) for g in neighborhood_test_dataloader], dim=0)
     graphlet_neighborhood_count_test = test_workload.neighborhood_dataset.aggregate_neighborhood_count(neighborhood_count_test) # user can get the graphlet count of each graph in this way
-    pd.DataFrame(torch.round(graphlet_neighborhood_count_test).detach().cpu().numpy()).to_csv(os.path.join('results/raw_results', 'neighborhood_{}_{}_{}.csv'.format(args_neighborhood.conv_type, args_opt.test_dataset, time))) # save the inferenced results to csv file
+    pd.DataFrame(torch.round(F.relu(graphlet_neighborhood_count_test)).detach().cpu().numpy()).to_csv(os.path.join('results/raw_results', 'neighborhood_{}_{}_{}.csv'.format(args_neighborhood.conv_type, args_opt.test_dataset, time))) # save the inferenced results to csv file
 
     gossip_count_test = torch.cat([gossip_model.graph_to_count(g) for g in gossip_test_dataloader], dim=0)
     graphlet_gossip_count_test = test_workload.gossip_dataset.aggregate_neighborhood_count(gossip_count_test) # user can get the graphlet count of each graph in this way
-    pd.DataFrame(torch.round(graphlet_gossip_count_test).detach().cpu().numpy()).to_csv(os.path.join('results/raw_results', 'gossip_{}_{}_{}.csv'.format(args_gossip.conv_type, args_opt.test_dataset, time))) # save the inferenced results to csv file
+    pd.DataFrame(torch.round(F.relu(graphlet_gossip_count_test)).detach().cpu().numpy()).to_csv(os.path.join('results/raw_results', 'gossip_{}_{}_{}.csv'.format(args_gossip.conv_type, args_opt.test_dataset, time))) # save the inferenced results to csv file
 
     print('done')
 
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     # debug; TODO: the following restrictions are added because of the limited implemented senarios
     assert args_neighborhood.use_hetero == True
 
-    neighborhood_checkpoint = 'ckpt/neighborhood/lightning_logs/version_0/checkpoints/epoch=299-step=655800.ckpt'
+    neighborhood_checkpoint = 'ckpt/neighborhood/sage_tconv_main.ckpt'
     gossip_checkpoint = 'test/gossip/lightning_logs/version_4/checkpoints/epoch=0-step=600.ckpt'
 
     main(args_neighborhood, args_gossip, args_opt, train_neighborhood= False, train_gossip= False, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint) 

@@ -85,10 +85,11 @@ class NeighborhoodCountingModel(pl.LightningModule):
         return optimizer
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
+        # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20, min_lr=1E-5) # add schedular
 
-        return [optimizer], [lr_scheduler]
+        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler, "monitor": "neighborhood_counting_val_loss"}
 
     # definition of the model that can also be used by pytorch
     def embed_to_count(self, embs: Tuple[torch.Tensor]):
@@ -130,7 +131,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
             pred_results.append(results)
         pred_results = torch.cat(pred_results, dim=-1)
 
-        pred_results = F.relu(2**pred_results-1)
+        pred_results = 2**pred_results-1
         return pred_results
 
     def train_forward(self, batch, batch_idx):

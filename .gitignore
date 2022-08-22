@@ -20,5 +20,6 @@ core
 *.jpg
 *.pdf
 *.pkl
+*.pt
 lightning_logs/
 regular_*.txt
