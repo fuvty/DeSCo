@@ -76,7 +76,7 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
 
     if train_neighborhood:
         neighborhood_model = NeighborhoodCountingModel(input_dim=1, hidden_dim=args_neighborhood.hidden_dim, args=args_neighborhood)
-        neighborhood_model.to_hetero(tconv_target= args_neighborhood.use_tconv, tconv_query= args_neighborhood.use_tconv)
+        neighborhood_model = neighborhood_model.to_hetero(tconv_target= args_neighborhood.use_tconv, tconv_query= args_neighborhood.use_tconv)
     else:
         assert neighborhood_checkpoint is not None
         neighborhood_model = NeighborhoodCountingModel.load_from_checkpoint(neighborhood_checkpoint) # to hetero is automatically done upon loading 
@@ -155,4 +155,4 @@ if __name__ == "__main__":
     neighborhood_checkpoint = 'ckpt/neighborhood/sage_tconv_main.ckpt'
     gossip_checkpoint = 'test/gossip/lightning_logs/version_4/checkpoints/epoch=0-step=600.ckpt'
 
-    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= False, train_gossip= False, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint) 
+    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= True, train_gossip= True, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint) 

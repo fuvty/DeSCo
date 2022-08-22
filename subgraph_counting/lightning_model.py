@@ -216,6 +216,8 @@ class NeighborhoodCountingModel(pl.LightningModule):
         else:
             self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union', 'union_node')] ), aggr='sum')
     
+        return self
+
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         '''
         convert the GNN model to heterogeneous model according to the checkpoint

@@ -59,10 +59,7 @@ class BaseGNN(nn.Module):
             x, edge_index = data.node_feature, data.edge_index
         
         # pre_mp, gnn layers
-        if self.use_hetero:
-            emb = self.gnn_core.forward(x, edge_index, query_emb= query_emb)
-        else:
-            emb = self.gnn_core.forward(x, edge_index, query_emb= query_emb)
+        emb = self.gnn_core.forward(x, edge_index, query_emb= query_emb)
 
         # use special weights for anchored node when baseline is not gossip or no baseline is specificly assigned
         if self.use_hetero:
