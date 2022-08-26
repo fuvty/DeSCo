@@ -318,8 +318,8 @@ class SAGEConv(pyg_nn.MessagePassing):
         """
         if isinstance(x, torch.Tensor):
             x = (x, x)
-        #edge_index, edge_weight = add_remaining_self_loops(
-        #    edge_index, edge_weight, 1, x.size(self.node_dim))
+            
+        edge_index = torch.zeros((2,0), dtype=torch.long, device=x[0].device) if edge_index is None else edge_index # fillin empty edge_index if it doesn't exist
         if torch.numel(edge_index) != 0:
             edge_index, _ = pyg_utils.remove_self_loops(edge_index)
 
