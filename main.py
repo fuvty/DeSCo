@@ -27,13 +27,17 @@ from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
 from subgraph_counting.workload import Workload
 
 
-def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = True, train_gossip: bool = True, neighborhood_checkpoint = None, gossip_checkpoint = None):
+def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = True, train_gossip: bool = True, neighborhood_checkpoint = None, gossip_checkpoint = None, nx_queries: List[nx.Graph] = None):
     '''
     train the model and test accorrding to the config
     '''
 
     # define queries
-    query_ids = gen_query_ids(query_size= [3,4,5])
+    if nx_queries is None:
+        query_ids = gen_query_ids(query_size= [3,4,5])
+    else:
+        query_ids = None
+
     print('use queries with atlas ids:', query_ids)
 
     # define pre-transform
@@ -51,7 +55,7 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
         if train_workload.exist_groundtruth(query_ids=query_ids):
             train_workload.canonical_count_truth = train_workload.load_groundtruth(query_ids=query_ids)
         else:
-            train_workload.canonical_count_truth = train_workload.compute_groundtruth(query_ids= query_ids, save_to_file= True)
+            train_workload.canonical_count_truth = train_workload.compute_groundtruth(query_ids= query_ids, queries=nx_queries, save_to_file= True)
         train_workload.generate_pipeline_datasets(depth_neigh=args_neighborhood.depth, neighborhood_transform=neighborhood_transform) # generate pipeline dataset, including neighborhood dataset and gossip dataset
 
     # define testing workload
@@ -61,7 +65,7 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
     if test_workload.exist_groundtruth(query_ids=query_ids): 
         test_workload.canonical_count_truth = test_workload.load_groundtruth(query_ids=query_ids)
     else:
-        test_workload.canonical_count_truth = test_workload.compute_groundtruth(query_ids= query_ids, save_to_file= True) # compute ground truth if not any
+        test_workload.canonical_count_truth = test_workload.compute_groundtruth(query_ids= query_ids, queries=nx_queries, save_to_file= True) # compute ground truth if not any
     test_workload.generate_pipeline_datasets(depth_neigh=args_neighborhood.depth, neighborhood_transform=neighborhood_transform) # generate pipeline dataset, including neighborhood dataset and gossip dataset
 
 
@@ -155,4 +159,4 @@ if __name__ == "__main__":
     neighborhood_checkpoint = 'ckpt/neighborhood/sage_tconv_main.ckpt'
     gossip_checkpoint = 'test/gossip/lightning_logs/version_4/checkpoints/epoch=0-step=600.ckpt'
 
-    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= True, train_gossip= True, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint) 
+    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= True, train_gossip= True, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint, nx_queries=None) 

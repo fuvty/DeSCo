@@ -293,28 +293,42 @@ class Workload():
         '''
         check if ground truth exists
         '''
+        if query_ids is None:
+            return False
         folder_path = os.path.join(self.root, 'CanonicalCountTruth')
         file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
         return os.path.exists(os.path.join(folder_path, file_name))
 
-    def compute_groundtruth(self, query_ids, num_workers= 4, save_to_file= True):
+    def compute_groundtruth(self, query_ids= None, queries= None, num_workers= 4, save_to_file= True):
         '''
-        compute the ground truth canonical count for the given query_ids
+        compute the ground truth canonical count for the given query_ids or queries
         '''
+        if query_ids is None and queries is None:
+            raise ValueError('query_ids or queries must be given')
+        elif query_ids is not None and queries is not None:
+            raise ValueError('query_ids and queries cannot be given at the same time')
+        
+        if query_ids is not None:
+            # gen queries based on query_id
+            queries = [graph_atlas_plus(i) for i in query_ids]
+            use_query_ids = True
+        elif queries is not None:
+            # gen query_ids based on queries
+            query_ids = [-i for i in range(len(queries))]
+            use_query_ids = False
+        
         # convert dataset
         if self.nx_targets is None:
             self.nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
         
         nx_targets = [g.copy() for g in self.nx_targets] # make copy so that count_qid is not stored
+
         # init count value to zero
         for graph in nx_targets:
             for node in graph.nodes:
                 for qid in query_ids:
                     graph.nodes[node]['count_'+str(qid)] = 0.0
         
-
-        # gen queries based on query_id
-        queries = [graph_atlas_plus(i) for i in query_ids]
         # NOTE: debug, set query_ids and queries to computed value for now. assuming no additional information of canonical count.
         self.query_ids = query_ids
         self.queries = queries
@@ -367,7 +381,10 @@ class Workload():
             folder_path = os.path.join(self.root, 'CanonicalCountTruth')
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
-            file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
+            if use_query_ids:
+                file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
+            else:
+                file_name = 'query_num_{:d}_'.format(len(queries)) + 'query_len_sum_' + str(sum([len(g) for g in queries])) + '.pt'
             torch.save(count_motif, os.path.join(folder_path, file_name))
 
         return count_motif
