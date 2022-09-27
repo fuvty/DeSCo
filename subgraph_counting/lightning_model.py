@@ -4,7 +4,8 @@ import sys
 parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(parentdir)
 
-from typing import Any, Dict, Tuple, List
+import warnings
+from typing import Any, Dict, List, Tuple
 
 import networkx as nx
 import numpy as np
@@ -195,7 +196,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
         queries_pyg, queries_nx = gen_queries(query_ids, queries, transform=transform)
         min_len_neighbor =  max(nx.diameter(query) for query in queries_nx)
         if self.args.depth < min_len_neighbor:
-            raise ValueError("neighborhood diameter {:d} is too small for the queries, the minimum is {:d}".format(self.args.depth, min_len_neighbor))
+            warnings.warn("neighborhood diameter {:d} is too small for the queries, the minimum is {:d}".format(self.args.depth, min_len_neighbor))
         self.query_loader = DataLoader(queries_pyg, batch_size= 64)
 
     def get_query_emb(self):

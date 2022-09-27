@@ -37,13 +37,13 @@ def gen_query_ids(query_size: List[int]) -> List[int]:
     input: query_size, a list of query size
     output: query_ids, a list of query ids
     '''
-    if max(query_size) > 5:
-        raise NotImplementedError
     query_ids = defaultdict(list)
-    for i in range(6,53): # range(6,8): 3-node graphs, range(13,19): 4-node graphs, range(29,53): 5-node graphs
+    for i in range(6,209): # range(6,8): 3-node graphs, range(13,19): 4-node graphs, range(29,53): 5-node graphs
         g = nx.graph_atlas(i)
         if nx.is_connected(g):
             query_ids[len(g)].append(i)
+        if len(g) > max(query_size):
+            break
 
     return_ids = []
 

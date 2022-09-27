@@ -27,18 +27,25 @@ from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
 from subgraph_counting.workload import Workload
 
 
-def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = True, train_gossip: bool = True, neighborhood_checkpoint = None, gossip_checkpoint = None, nx_queries: List[nx.Graph] = None):
+def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = True, train_gossip: bool = True, neighborhood_checkpoint = None, gossip_checkpoint = None, nx_queries: List[nx.Graph] = None, atlas_query_ids: List[int] = None):
     '''
     train the model and test accorrding to the config
     '''
 
     # define queries
-    if nx_queries is None:
-        query_ids = gen_query_ids(query_size= [3,4,5])
-    else:
+    if nx_queries is None and atlas_query_ids is not None:
+        query_ids = atlas_query_ids
+        print('define queries with atlas ids:', query_ids)
+    elif nx_queries is not None and atlas_query_ids is None:
         query_ids = None
+        print('define queries with nx graphs:', nx_queries)
+        print('query_ids set to None')
+    elif nx_queries is not None and atlas_query_ids is not None:
+        raise ValueError('nx_queries and atlas_query_ids cannot be both empty')
+    else:
+        raise ValueError('nx_queries and atlas_query_ids cannot be both None')
 
-    print('use queries with atlas ids:', query_ids)
+    
 
     # define pre-transform
     zero_node_feat_transform = ZeroNodeFeat() if args_neighborhood.zero_node_feat else None
@@ -156,7 +163,10 @@ if __name__ == "__main__":
     # debug; TODO: the following restrictions are added because of the limited implemented senarios
     assert args_neighborhood.use_hetero == True
 
+    # neighborhood_checkpoint = 'ckpt/neighborhood/sage_tconv_main.ckpt'
     neighborhood_checkpoint = 'ckpt/neighborhood/sage_tconv_main.ckpt'
-    gossip_checkpoint = 'test/gossip/lightning_logs/version_4/checkpoints/epoch=0-step=600.ckpt'
+    gossip_checkpoint = 'ckpt/gossip/migrate/lightning_logs/version_0/checkpoints/epoch=0-step=600.ckpt'    
 
-    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= True, train_gossip= True, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint, nx_queries=None) 
+    query_ids = gen_query_ids(query_size= [3])
+
+    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= False, train_gossip= False, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint, nx_queries=None, atlas_query_ids= query_ids) 

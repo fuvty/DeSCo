@@ -36,7 +36,8 @@ def compute_groundtruth(train_dataset_name, output_path, force_nx_queries: List[
 
     # define queries
     if force_nx_queries is None:
-        query_ids = gen_query_ids(query_size= [3,4,5])
+        query_ids = gen_query_ids(query_size= [6])
+        force_nx_queries = [nx.graph_atlas(i) for i in query_ids]
     else:
         query_ids = None
 
@@ -66,10 +67,13 @@ def compute_groundtruth(train_dataset_name, output_path, force_nx_queries: List[
     
 
 if __name__ == "__main__":
-    query_path = '/home/futy18/nfs/repos/prime/GNN_Mining/freq_mining/results/out-patterns-motivo.p'
-    output_path = '/home/futy18/nfs/repos/prime/GNN_Mining/freq_mining/results/ground_truth_motivo.csv'
+    query_path = '/home/futy18/nfs/repos/prime/GNN_Mining/freq_mining/results/out-patterns-mfinder.p'
+    output_path = '/home/futy18/nfs/repos/prime/GNN_Mining/freq_mining/results/ground_truth_mfinder.csv'
+    # output_path = '/home/futy18/nfs/repos/prime/NIPS22/DeSCo/data/ENZYMES/CanonicalCountTruth/ground_truth_size_6_DeSCo.csv'
 
     with open(query_path, 'rb') as f:
         queries = pickle.load(f)
 
     compute_groundtruth('ENZYMES', output_path, force_nx_queries=queries)
+
+    # compute_groundtruth('ENZYMES', output_path, force_nx_queries=None)

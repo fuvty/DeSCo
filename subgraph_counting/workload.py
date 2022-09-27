@@ -35,8 +35,6 @@ from subgraph_counting.data import (SymmetricFactor, count_canonical,
 from subgraph_counting.transforms import (NetworkxToHetero, Relabel,
                                           RemoveSelfLoops)
 
-SORT= False
-
 class GossipDataset(pyg.data.InMemoryDataset):
     '''
     basically the same as pyg.data.Dataset.
@@ -261,6 +259,10 @@ class Workload():
 
         self.nx_targets = None
 
+        # default settings
+        self.order_by_degree = False
+        self.max_file_name_len = 30
+
     def generate_pipeline_datasets(self, depth_neigh, neighborhood_transform=None, gossip_transform=None, pre_transform=None, pre_filter=None):
 
         # sample neigh and generate neighborhood dataset
@@ -283,7 +285,7 @@ class Workload():
         folder_path = os.path.join(self.root, 'CanonicalCountTruth')
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
-        file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
+        file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + '.pt'
         if os.path.exists(os.path.join(folder_path, file_name)):
             return torch.load(os.path.join(folder_path, file_name))
         else:
@@ -296,7 +298,7 @@ class Workload():
         if query_ids is None:
             return False
         folder_path = os.path.join(self.root, 'CanonicalCountTruth')
-        file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
+        file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + '.pt'
         return os.path.exists(os.path.join(folder_path, file_name))
 
     def compute_groundtruth(self, query_ids= None, queries= None, num_workers= 4, save_to_file= True):
@@ -382,7 +384,7 @@ class Workload():
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
             if use_query_ids:
-                file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids)) + '.pt'
+                file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + '.pt'
             else:
                 file_name = 'query_num_{:d}_'.format(len(queries)) + 'query_len_sum_' + str(sum([len(g) for g in queries])) + '.pt'
             torch.save(count_motif, os.path.join(folder_path, file_name))
@@ -431,7 +433,7 @@ class Workload():
         # len_neighbor = 11 # debug
         print('neighborhood_length:', len_neighbor)
         nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in dataset]
-        if SORT: 
+        if self.order_by_degree: 
             nx_targets = [nx.convert_node_labels_to_integers(g, first_label=0, ordering="decreasing degree") for g in nx_targets] # relabel nodes of graphs according to their degree
             self.name += "_sort"
         nx_targets_raw = [g.copy() for g in nx_targets]
