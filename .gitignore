@@ -12,8 +12,8 @@ results/
 *.sw?
 orca/
 core
-/ckpt/
-/test/
+ckpt/
+test/
 */workload/
 *_groundtruth.csv
 *.csv
@@ -24,3 +24,5 @@ core
 lightning_logs/
 regular_*.txt
 desco.egg-info/
+
+!github_resource/*

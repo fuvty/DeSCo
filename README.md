@@ -2,7 +2,7 @@
 
 This repository is the official implementation of DeSCo: Towards Scalable Deep Subgraph Counting.  
 
-
+![DeSCo workflow](github_resource/workflow.png?raw=true "DeSCo workflow")
 
 ## Requirements
 
