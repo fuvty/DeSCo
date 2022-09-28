@@ -104,9 +104,9 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
     ########### begin gossip counting ###########
     # apply neighborhood count output to gossip dataset
     if train_gossip:
-        neighborhood_count_train = torch.cat([neighborhood_model.graph_to_count(g) for g in neighborhood_train_dataloader], dim=0) # size = (#neighborhood, #queries)
+        neighborhood_count_train = torch.cat(neighborhood_trainer.predict(neighborhood_model, neighborhood_train_dataloader), dim=0) # size = (#neighborhood, #queries)
         train_workload.apply_neighborhood_count(neighborhood_count_train)
-    neighborhood_count_test = torch.cat([neighborhood_model.graph_to_count(g) for g in neighborhood_test_dataloader], dim=0)
+    neighborhood_count_test = torch.cat(neighborhood_trainer.predict(neighborhood_model, neighborhood_test_dataloader), dim=0)
     test_workload.apply_neighborhood_count(neighborhood_count_test)
 
     # define gossip counting dataset
@@ -116,13 +116,13 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
     input_dim = 1
     args_gossip.use_hetero = False
     if train_gossip:
-        gossip_model = GossipCountingModel(input_dim, args_gossip.hidden_dim, args_gossip, emb_channels= args_neighborhood.hidden_dim)
+        gossip_model = GossipCountingModel(input_dim, args_gossip.hidden_dim, args_gossip, emb_channels= args_neighborhood.hidden_dim, input_pattern_emb= True)
     else:
         assert gossip_checkpoint is not None
         gossip_model = GossipCountingModel.load_from_checkpoint(gossip_checkpoint)
     gossip_model.set_query_emb(neighborhood_model.get_query_emb())
 
-    gossip_trainer = pl.Trainer(max_epochs=args_gossip.num_epoch, accelerator="gpu", devices=[args_opt.gpu], default_root_dir=args_gossip.model_path)
+    gossip_trainer = pl.Trainer(max_epochs=args_gossip.num_epoch, accelerator="gpu", devices=[args_opt.gpu], default_root_dir=args_gossip.model_path, detect_anomaly=True)
 
     # train gossip model
     if train_gossip:
@@ -134,13 +134,22 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
     ########### output graphlet results ###########
     time = datetime.datetime.now().strftime('%Y%m%d_%H:%M:%S')
 
-    neighborhood_count_test = torch.cat([neighborhood_model.graph_to_count(g) for g in neighborhood_test_dataloader], dim=0)
+    neighborhood_count_test = torch.cat(neighborhood_trainer.predict(neighborhood_model, neighborhood_test_dataloader), dim=0)
     graphlet_neighborhood_count_test = test_workload.neighborhood_dataset.aggregate_neighborhood_count(neighborhood_count_test) # user can get the graphlet count of each graph in this way
     pd.DataFrame(torch.round(F.relu(graphlet_neighborhood_count_test)).detach().cpu().numpy()).to_csv(os.path.join('results/raw_results', 'neighborhood_{}_{}_{}.csv'.format(args_neighborhood.conv_type, args_opt.test_dataset, time))) # save the inferenced results to csv file
 
-    gossip_count_test = torch.cat([gossip_model.graph_to_count(g) for g in gossip_test_dataloader], dim=0)
+    gossip_count_test = torch.cat(gossip_trainer.predict(gossip_model, gossip_test_dataloader), dim=0)
     graphlet_gossip_count_test = test_workload.gossip_dataset.aggregate_neighborhood_count(gossip_count_test) # user can get the graphlet count of each graph in this way
     pd.DataFrame(torch.round(F.relu(graphlet_gossip_count_test)).detach().cpu().numpy()).to_csv(os.path.join('results/raw_results', 'gossip_{}_{}_{}.csv'.format(args_gossip.conv_type, args_opt.test_dataset, time))) # save the inferenced results to csv file
+
+
+    # analysis: node level analysis
+    pd.DataFrame(neighborhood_count_test.detach().cpu().numpy()).to_csv(os.path.join('tmp', args_opt.test_dataset, 'neighbor_count_results.csv')) # save the inferenced results to csv file
+    pd.DataFrame(test_workload.neighborhood_dataset.nx_neighs_index).to_csv(os.path.join('tmp', args_opt.test_dataset, 'neighbor_count_index.csv')) # save the inferenced results to csv file
+    pd.DataFrame(gossip_count_test.detach().cpu().numpy()).to_csv(os.path.join('tmp', args_opt.test_dataset, 'gossip_count_results.csv')) # save the inferenced results to csv file
+    import pickle
+    with open('tmp/{}/nx.pk'.format(args_opt.test_dataset), 'wb') as f:
+        pickle.dump(test_workload.to_networkx(), f)
 
     print('done')
 
@@ -167,6 +176,6 @@ if __name__ == "__main__":
     neighborhood_checkpoint = 'ckpt/neighborhood/sage_tconv_main.ckpt'
     gossip_checkpoint = 'ckpt/gossip/migrate/lightning_logs/version_0/checkpoints/epoch=0-step=600.ckpt'    
 
-    query_ids = gen_query_ids(query_size= [3])
+    query_ids = gen_query_ids(query_size= [3,4,5])
 
-    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= False, train_gossip= False, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint, nx_queries=None, atlas_query_ids= query_ids) 
+    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= False, train_gossip= True, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint, nx_queries=None, atlas_query_ids= query_ids) 

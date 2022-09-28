@@ -81,9 +81,9 @@ class NeighborhoodCountingModel(pl.LightningModule):
         loss = self.train_forward(batch, batch_idx)
         self.log('neighborhood_counting_val_loss', loss, batch_size=64)
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
-        return optimizer
+    # def configure_optimizers(self):
+    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
+    #     return optimizer
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
@@ -112,6 +112,9 @@ class NeighborhoodCountingModel(pl.LightningModule):
             count = self.count_model(embs)
         return count
 
+    def predict_step(self, batch, batch_idx) -> torch.Tensor:
+        return self.graph_to_count(batch)
+
     def graph_to_count(self, batch) -> torch.Tensor:
         '''
         use 2^(pred+1) as the predition to test the model, which is the groud truth canonical count
@@ -120,7 +123,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
 
         emb_queries = []
         for query_batch in self.query_loader:
-            emb_queries.append(self.emb_model_query(query_batch))
+            emb_queries.append(self.emb_model_query(query_batch.to(self.device)))
         emb_queries = torch.cat(emb_queries, dim=0) 
         emb_targets = self.emb_model(batch)
 
@@ -134,6 +137,10 @@ class NeighborhoodCountingModel(pl.LightningModule):
 
         pred_results = 2**pred_results-1
         return pred_results
+
+    def graph_to_embed(self, batch) -> torch.Tensor:
+        emb = self.emb_model(batch)
+        return emb
 
     def train_forward(self, batch, batch_idx):
         '''
@@ -254,9 +261,16 @@ class GossipCountingModel(pl.LightningModule):
         loss = self.train_forward(batch, batch_idx)
         self.log('gossip_counting_val_loss', loss, batch_size=64)
 
+    # def configure_optimizers(self):
+    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
+    #     return optimizer
+
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
-        return optimizer
+        # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20, min_lr=1E-5) # add schedular
+
+        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler, "monitor": "gossip_counting_val_loss"}
 
     def train_forward(self, batch, batch_idx):
         '''
@@ -269,19 +283,30 @@ class GossipCountingModel(pl.LightningModule):
             batch.node_feature = batch.x[:,query_id].view(-1,1)
             query_emb= self.query_emb[query_id, :].view(1,-1).detach().to(self.device) # with shape #query * feature_size, do not update query emb here; used by GossipConv
             pred_counts = self.emb_model(batch, query_emb= query_emb)
-            pred_counts = pred_counts + torch.log2(batch.y[:,query_id]+1).view(-1,1)
-            loss = self.criterion(2**(pred_counts-1), batch.y[:,query_id].view(-1,1)) # pred diff
+            
+            # pred_counts = torch.nan_to_num(pred_counts) # set to zero if nan
+            ground_truth = torch.log2(batch.y[:,query_id]+1).view(-1,1)
+            # ground_truth = torch.nan_to_num(torch.log2(batch.y[:,query_id]+1).view(-1,1))
+
+            pred_counts = pred_counts + ground_truth
+            loss = self.criterion(pred_counts, ground_truth) # pred diff
             loss_queries.append(loss)
+
+            # print(pred_counts.view(-1),torch.log2(batch.y[:,query_id]+1).view(-1),loss)
         
         loss = torch.sum(torch.stack(loss_queries))
         return loss
     
+    def predict_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
+        return self.graph_to_count(batch)
+
     def graph_to_count(self, batch, query_emb= None) -> torch.Tensor:
         pred_results = []
         for query_id in range(batch.x.shape[1]):
             batch.node_feature = batch.x[:,query_id].view(-1,1)
             query_emb= self.query_emb[query_id, :].view(1,-1).detach().to(self.device) # with shape #query * feature_size, do not update query emb here; used by GossipConv
             pred_counts = self.emb_model(batch, query_emb= query_emb)
+            
             pred_counts = pred_counts + torch.log2(batch.y[:,query_id]+1).view(-1,1)
             pred_counts = 2**(pred_counts-1)
 
@@ -293,6 +318,7 @@ class GossipCountingModel(pl.LightningModule):
     def criterion(self, count, truth):
         # regression
         loss = F.smooth_l1_loss(count, truth)
+        # loss = torch.clip(loss, -0.5, 0.5)
         return loss
 
     def set_query_emb(self, query_emb: torch.Tensor, query_ids=None, queries=None):

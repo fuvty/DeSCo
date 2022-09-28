@@ -21,6 +21,7 @@ test/
 *.pdf
 *.pkl
 *.pt
+*.pk
 lightning_logs/
 regular_*.txt
 desco.egg-info/

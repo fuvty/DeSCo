@@ -266,7 +266,7 @@ class GossipConv(pyg_nn.MessagePassing):
         edge_index, _ = pyg_utils.remove_self_loops(edge_index)
         
         # calculate information flow
-        if edge_weight == None:
+        if edge_weight is None:
             edge_index, _ = pyg_utils.remove_self_loops(edge_index)
             edge_index = pyg_utils.to_undirected(edge_index)
             edge_weight = edge_index[0,:] < edge_index[1,:]

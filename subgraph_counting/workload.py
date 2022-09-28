@@ -560,6 +560,10 @@ class Workload():
 
         print("workload generation is done")
 
+    def to_networkx(self):
+        nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
+        return nx_targets
+
     def save(self, root_folder: str = None):
         if root_folder == None:
             root_folder = "/tmp/"+self.name
