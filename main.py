@@ -87,7 +87,7 @@ def main(args_neighborhood, args_gossip, args_opt, train_neighborhood: bool = Tr
 
     if train_neighborhood:
         neighborhood_model = NeighborhoodCountingModel(input_dim=1, hidden_dim=args_neighborhood.hidden_dim, args=args_neighborhood)
-        neighborhood_model = neighborhood_model.to_hetero(tconv_target= args_neighborhood.use_tconv, tconv_query= args_neighborhood.use_tconv)
+        neighborhood_model = neighborhood_model.to_hetero_old(tconv_target= args_neighborhood.use_tconv, tconv_query= args_neighborhood.use_tconv)
     else:
         assert neighborhood_checkpoint is not None
         neighborhood_model = NeighborhoodCountingModel.load_from_checkpoint(neighborhood_checkpoint) # to hetero is automatically done upon loading 

@@ -213,7 +213,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
         emb_queries = torch.cat(emb_queries, dim=0) 
         return emb_queries
 
-    def to_hetero(self, tconv_target=False, tconv_query=False):
+    def to_hetero_old(self, tconv_target=False, tconv_query=False):
         if tconv_target:
             self.emb_model.gnn_core = pyg.nn.to_hetero(self.emb_model.gnn_core, (['count', 'canonical'], [('count', 'union_triangle', 'count'), ('count', 'union_tride', 'count'), ('count', 'union_triangle', 'canonical'), ('count', 'union_tride', 'canonical'), ('canonical', 'union_triangle', 'count'), ('canonical', 'union_tride', 'count')] ), aggr='sum')
         else:
@@ -226,13 +226,33 @@ class NeighborhoodCountingModel(pl.LightningModule):
     
         return self
 
+
+    def to_hetero(self, order: int = 3, SHMP_target=False, SHMP_query=False):
+        if SHMP_target:
+            if order == 3:
+                self.emb_model.gnn_core = pyg.nn.to_hetero(self.emb_model.gnn_core, (['count', 'canonical'], [('count', 'union_triangle', 'count'), ('count', 'union_tride', 'count'), ('count', 'union_triangle', 'canonical'), ('count', 'union_tride', 'canonical'), ('canonical', 'union_triangle', 'count'), ('canonical', 'union_tride', 'count')] ), aggr='sum')
+            elif order == 4:
+                raise NotImplementedError
+        else:
+            self.emb_model.gnn_core = pyg.nn.to_hetero(self.emb_model.gnn_core, (['count', 'canonical'], [('count', 'union', 'canonical'), ('canonical', 'union', 'count'), ('count', 'union', 'count')] ), aggr='sum')
+        
+        if SHMP_query:
+            if order == 3:
+                self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union_triangle', 'union_node'), ('union_node', 'union_tride', 'union_node')] ), aggr='sum')
+            elif order == 4:
+                raise NotImplementedError
+        else:
+            self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union', 'union_node')] ), aggr='sum')
+    
+        return self
+
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         '''
         convert the GNN model to heterogeneous model according to the checkpoint
         '''
         use_hetero = checkpoint['hyper_parameters']['args'].use_hetero
         use_tconv = checkpoint['hyper_parameters']['args'].use_tconv
-        self = self.to_hetero(tconv_target=use_tconv, tconv_query=use_tconv) if use_hetero else self
+        self = self.to_hetero_old(tconv_target=use_tconv, tconv_query=use_tconv) if use_hetero else self
         return None
 
 
