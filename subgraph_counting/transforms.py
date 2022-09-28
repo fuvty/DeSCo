@@ -10,6 +10,7 @@ from torch import Tensor
 from torch_geometric.data import HeteroData, Data, Batch
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.typing import EdgeType, NodeType, QueryType
+import orca
 
 
 class ZeroNodeFeat(BaseTransform):
@@ -86,7 +87,42 @@ class ToTCONV(BaseTransform):
             data[src_type, rel_type+'_tride', dst_type].edge_index = edge_tensor[:,~tri_edge_index] # size = 2*#tride_edge
         return data
     
+class ToQconvHetero(BaseTransform):
+    '''
+    convert pyg graph to qconv graph
+    '''
+    def __init__(self, node_attr: str = 'x'):
+        self.node_attr = node_attr
 
+    def __call__(self, data: HeteroData):
+        node_types = data.metadata()[0]
+        edge_types = data.metadata()[1]
+
+        homoData = data.to_homogeneous(edge_attrs= None, node_attrs= None)
+        nx_graph = pyg_utils.to_networkx(homoData, node_attrs=['node_type','node_feature'], to_undirected= True, remove_self_loops= True)
+        counts = orca.orbit_counts('edge', 4, nx_graph)
+        priority = [11, 10, 5, 6, 7, 9, 4, 8, 3, 2]
+        cnt = 0
+        for edge in nx_graph.edges:
+            find = False
+            for p in priority:
+                if counts[cnt][p] > 0:
+                    nx_graph.edges[edge]['node_type'] = 'union_'+str(p)
+                    find = True
+                    break
+            if not find:
+                nx_graph.edges[edge]['node_type'] = 'union_1'
+            
+
+            cnt += 1
+        for node in nx_graph.nodes:
+            nx_graph.nodes[node]['node_feature'] = torch.tensor(nx_graph.nodes[node]['node_feature'], dtype= torch.float32)
+            nx_graph.nodes[node]['node_type'] = node_types[nx_graph.nodes[node]['node_type']]
+
+        heteroData = NetworkxToHetero(nx_graph, type_key='node_type', feat_key='node_feature')
+        
+        
+        return heteroData
 class ToTconvHetero(BaseTransform):
     '''
     recommand call \'pyg_graph = T.ToUndirected()(pyg_graph)\' first

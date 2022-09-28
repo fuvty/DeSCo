@@ -232,7 +232,8 @@ class NeighborhoodCountingModel(pl.LightningModule):
             if order == 3:
                 self.emb_model.gnn_core = pyg.nn.to_hetero(self.emb_model.gnn_core, (['count', 'canonical'], [('count', 'union_triangle', 'count'), ('count', 'union_tride', 'count'), ('count', 'union_triangle', 'canonical'), ('count', 'union_tride', 'canonical'), ('canonical', 'union_triangle', 'count'), ('canonical', 'union_tride', 'count')] ), aggr='sum')
             elif order == 4:
-                raise NotImplementedError
+                src_dst_list = [('count', 'canonical'), ('count','count'), ('canonical', 'count')]
+                self.emb_model.gnn_core = pyg.nn.to_hetero(self.emb_model.gnn_core, (['count', 'canonical'], [(node_type[0], 'union_'+str(num), node_type[1]) for node_type in src_dst_list for num in range(1,12)]), aggr='sum')
         else:
             self.emb_model.gnn_core = pyg.nn.to_hetero(self.emb_model.gnn_core, (['count', 'canonical'], [('count', 'union', 'canonical'), ('canonical', 'union', 'count'), ('count', 'union', 'count')] ), aggr='sum')
         
@@ -240,7 +241,8 @@ class NeighborhoodCountingModel(pl.LightningModule):
             if order == 3:
                 self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union_triangle', 'union_node'), ('union_node', 'union_tride', 'union_node')] ), aggr='sum')
             elif order == 4:
-                raise NotImplementedError
+                self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union_'+str(num), 'union_node') for num in range(1,12)] ), aggr='sum')
+                
         else:
             self.emb_model_query.gnn_core = pyg.nn.to_hetero(self.emb_model_query.gnn_core, (['union_node'], [('union_node', 'union', 'union_node')] ), aggr='sum')
     
