@@ -7,6 +7,7 @@ log-*/
 plots/
 data/
 runs/
+tmp/
 /.empty/
 results/
 *.sw?
@@ -22,8 +23,13 @@ test/
 *.pkl
 *.pt
 *.pk
+*.ipynb
 lightning_logs/
 regular_*.txt
 desco.egg-info/
+orca-py/
+orca/
+
+
 
 !github_resource/*
