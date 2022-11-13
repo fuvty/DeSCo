@@ -68,7 +68,10 @@ class GossipDataset(pyg.data.InMemoryDataset):
         return data
         
     def apply_truth_from_dataset(self, truth):
-        self.slices['y'] = self.slices['x']
+        try:
+            self.slices['y'] = self.slices['x']
+        except:
+            print('Did not find attribute slices[\'x\'] in gossip dataset. Please check if the dataset is processed correctly. If there is only one graph in the dataset, it is normal')
         self.data.y = truth
 
     def apply_neighborhood_count(self, count: torch.Tensor, neighborhood_indicator):
@@ -301,7 +304,7 @@ class Workload():
         file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + '.pt'
         return os.path.exists(os.path.join(folder_path, file_name))
 
-    def compute_groundtruth(self, query_ids= None, queries= None, num_workers= 4, save_to_file= True):
+    def compute_groundtruth(self, query_ids= None, queries= None, num_workers= -1, save_to_file= True):
         '''
         compute the ground truth canonical count for the given query_ids or queries
         '''
@@ -351,6 +354,8 @@ class Workload():
         get_results = 0
 
         # start workers
+        if num_workers == -1:
+            num_workers = os.cpu_count()
         print('start workers: ' + str(num_workers) + ' workers, for ' + str(len(tasks)) + ' tasks')
 
         signal.signal(signal.SIGCHLD, signal.SIG_IGN)
