@@ -178,4 +178,4 @@ if __name__ == "__main__":
 
     query_ids = gen_query_ids(query_size= [3,4,5])
 
-    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= False, train_gossip= True, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint, nx_queries=None, atlas_query_ids= query_ids) 
+    main(args_neighborhood, args_gossip, args_opt, train_neighborhood= True, train_gossip= True, neighborhood_checkpoint= neighborhood_checkpoint, gossip_checkpoint= gossip_checkpoint, nx_queries=None, atlas_query_ids= query_ids) 

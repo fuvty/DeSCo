@@ -209,7 +209,7 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
 
 def MatchSubgraphWorker(task):
     '''
-    calculate the subgraph count for a given query
+    calculate the canonical count for a given query
     input: 
     task_queue: (tid, target, qid, query)
     output_queue: (tid, qid, count_dict)

@@ -29,6 +29,6 @@ regular_*.txt
 desco.egg-info/
 orca/
 .vscode/
-
+experimental/gml/*
 
 !github_resource/*
