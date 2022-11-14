@@ -1,0 +1,3 @@
+[submodule "orca-py"]
+	path = orca-py
+	url = git@github.com:qema/orca-py.git

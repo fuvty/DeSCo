@@ -27,9 +27,8 @@ test/
 lightning_logs/
 regular_*.txt
 desco.egg-info/
-orca-py/
 orca/
-
+.vscode/
 
 
 !github_resource/*
