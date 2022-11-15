@@ -54,20 +54,22 @@ def gen_query_ids(query_size: List[int]) -> List[int]:
     return return_ids
 
 
-def SymmetricFactor(graph: nx.Graph) -> int:
+def SymmetricFactor(graph: nx.Graph, node_feat_key: str = None) -> int:
     '''
-    input: graph that need to compute symmetric factor
+    input: graph that need to compute symmetric factor, the node feature key that need to be considered
     output: symmetric fator, which is the proportion of the number of mapping and the number of pattern
     '''
-    maps = GenVMap(graph, graph)
+    maps = GenVMap(graph, graph, node_feat_key)
     return len(maps)
 
-def GenVMap(subgraph: nx.Graph, graph: nx.Graph) -> list[map]:
+def GenVMap(subgraph: nx.Graph, graph: nx.Graph, node_feat_key: str = None) -> list[map]:
     '''
     input: subgraph and graph in nx.graph
     output: vmaps, map from nodes of subgraph to that of graph
     '''
-    GraphMatcher = nx.algorithms.isomorphism.GraphMatcher(graph, subgraph)
+    # node_match = (lambda x, y: all([all(x[key] == y[key]) for key in node_feat_key])) if node_feat_key is not None else None # given that node_feat_key is a list of keys
+    node_match = (lambda x, y: x[node_feat_key] == y[node_feat_key]) if node_feat_key is not None else None
+    GraphMatcher = nx.algorithms.isomorphism.GraphMatcher(graph, subgraph, node_match= node_match)
     SBM_iter = GraphMatcher.subgraph_isomorphisms_iter()
     maps = [dict(zip(map.values(), map.keys())) for map in SBM_iter]
     return maps

@@ -21,6 +21,7 @@ import networkx as nx
 import numpy as np
 import pytorch_lightning as pl
 import torch
+import torch.nn.functional as F
 import torch_geometric as pyg
 import torch_geometric.transforms as T
 from torch_geometric.loader import DataLoader
@@ -34,6 +35,8 @@ from subgraph_counting.data import (SymmetricFactor, count_canonical,
                                     sample_graphlet, sample_neigh_canonical)
 from subgraph_counting.transforms import (NetworkxToHetero, Relabel,
                                           RemoveSelfLoops)
+from subgraph_counting.utils import add_node_feat_to_networkx
+
 
 class GossipDataset(pyg.data.InMemoryDataset):
     '''
@@ -43,12 +46,16 @@ class GossipDataset(pyg.data.InMemoryDataset):
 
     def __init__(self, dataset, root, transform=None, pre_transform=None, pre_filter=None, hetero_graph= True) -> None:
         self.dataset = dataset
+        self.hetero_graph = hetero_graph
+        # self.node_feat = node_feat
         super(GossipDataset, self).__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
     def processed_file_names(self):
-        return ['gossip_pyg.pt']
+        # suffix = '_node_feat' if self.node_feat else ''
+        suffix = ''
+        return ['gossip_pyg'+suffix+'.pt']
 
     def process(self):
         '''
@@ -100,9 +107,10 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
     '''
     get a normal pyg dataset and transform it into a canonical neighborhood dataset to feed to dataloader.
     '''
-    def __init__(self, depth_neigh, root, dataset: pyg.data.dataset.Dataset = None, nx_targets=None, transform=None, pre_transform=None, pre_filter=None, hetero_graph= True):
+    def __init__(self, depth_neigh, root, dataset: pyg.data.dataset.Dataset = None, nx_targets=None, transform=None, pre_transform=None, pre_filter=None, hetero_graph= True, node_feat= False):
         self.nx_targets = nx_targets
         self.hetero_graph = hetero_graph
+        self.node_feat = node_feat
         self.dataset = dataset
         self.depth_neigh = depth_neigh
         super(NeighborhoodDataset, self).__init__(root, transform, pre_transform, pre_filter)
@@ -110,9 +118,13 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
         self.nx_neighs_index = np.load(self.processed_paths[1]) # numpy 2D int array to show (graph_id, node_id) of each neighborhood, with shape (#neighborhood, 2)
         self.nx_neighs_indicator = np.load(self.processed_paths[2]) # numpy bool array of shape (#n), indicating wheather the node is chosen as a neighborhood. size = #node in the dataset.
 
+        self.node_feat_key = 'feat'
+        # TODO: always set node_feat_key in dataset as 'feat' for now
+
     @property
     def processed_file_names(self):
-        return ['neighs_pyg_depth_'+str(self.depth_neigh)+'.pt', 'neighs_index_depth_'+str(self.depth_neigh)+'.npy', 'neighs_indicator_depth_'+str(self.depth_neigh)+'.npy']
+        suffix = '_node_feat' if self.node_feat else ''
+        return ['neighs_pyg_depth_'+str(self.depth_neigh)+suffix+'.pt', 'neighs_index_depth_'+str(self.depth_neigh)+suffix+'.npy', 'neighs_indicator_depth_'+str(self.depth_neigh)+suffix+'.npy']
 
     def process(self):
         '''
@@ -122,7 +134,11 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
             raise AttributeError('must create Neighborhood dataset with a PyG dataset')
 
         if self.nx_targets is None:
-            nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
+            nx_targets = [pyg.utils.to_networkx(g, to_undirected=True, node_attrs=['x'] if self.node_feat else None) if type(g)==pyg.data.Data else g for g in self.dataset]
+            # TODO: make it better. Now, force change the name of node feat to 'feat' and make it as tensor
+            for graph in nx_targets:
+                for n, data in graph.nodes(data=True):
+                    data[self.node_feat_key] = torch.tensor(data.pop('x'))
             self.nx_targets = nx_targets
         else:
             nx_targets = self.nx_targets
@@ -211,11 +227,12 @@ def MatchSubgraphWorker(task):
     '''
     calculate the canonical count for a given query
     input: 
-    task_queue: (tid, target, qid, query)
+    task_queue: (tid, target, qid, query, node_feat_key), node_feat_key is the key of node feature to be considered in graph isomorphism
     output_queue: (tid, qid, count_dict)
     '''
-    tid, target, qid, query = task
-    GraphMatcher = nx.algorithms.isomorphism.GraphMatcher(target, query)
+    tid, target, qid, query, node_feat_key = task
+    node_match = (lambda x, y: x[node_feat_key] == y[node_feat_key]) if (node_feat_key is not None) else None
+    GraphMatcher = nx.algorithms.isomorphism.GraphMatcher(target, query, node_match= node_match)
     SBM_iter = GraphMatcher.subgraph_isomorphisms_iter()
     count_dict = defaultdict(int)
     for vmap in SBM_iter:
@@ -232,13 +249,15 @@ class Workload():
     '''
     generate the workload for subgraph counting problem, including the neighs and the ground truth
     '''
-    def __init__(self, dataset: pyg.data.dataset.Dataset, root: str, hetero_graph: bool = True, **kwargs) -> None:
+    def __init__(self, dataset: pyg.data.dataset.Dataset, root: str, hetero_graph: bool = True, node_feat_len: int = -1, **kwargs) -> None:
         # whether to generate hetero graph
+        # node feat: whether to add node feature as input
 
         self.dataset = dataset
         self.root = root
 
         self.hetero_graph = hetero_graph
+        self.node_feat = (node_feat_len != -1)
         # the args used by this workload
         self.queries = []
         # list of int, indicating the graph_atlas id of the query
@@ -266,10 +285,18 @@ class Workload():
         self.order_by_degree = False
         self.max_file_name_len = 30
 
+        if self.node_feat:
+            self.node_feat_len = node_feat_len
+            print('process dataset with node feature length ', self.node_feat_len)
+            self.node_feat_key = 'feat'
+        else:
+            self.node_feat_len = 1
+            self.node_feat_key = None
+
     def generate_pipeline_datasets(self, depth_neigh, neighborhood_transform=None, gossip_transform=None, pre_transform=None, pre_filter=None):
 
         # sample neigh and generate neighborhood dataset
-        self.neighborhood_dataset = NeighborhoodDataset(depth_neigh= depth_neigh, root= os.path.join(self.root, 'NeighborhoodDataset'), dataset= self.dataset,nx_targets= self.nx_targets, transform= neighborhood_transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
+        self.neighborhood_dataset = NeighborhoodDataset(depth_neigh= depth_neigh, root= os.path.join(self.root, 'NeighborhoodDataset'), dataset= self.dataset,nx_targets= self.nx_targets, transform= neighborhood_transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph, node_feat= self.node_feat)
         
         # generate gossip dataset
         self.gossip_dataset = GossipDataset(dataset= self.dataset, root= os.path.join(self.root, 'GossipDataset'), transform= gossip_transform, pre_transform= pre_transform, pre_filter= pre_filter, hetero_graph= self.hetero_graph)
@@ -279,7 +306,7 @@ class Workload():
             self.neighborhood_dataset.apply_truth_from_dataset(self.canonical_count_truth)
             self.gossip_dataset.apply_truth_from_dataset(self.canonical_count_truth)
 
-    def load_groundtruth(self, query_ids):
+    def load_groundtruth(self, query_ids, queries= None):
         '''
         load ground truth from file if exist;
         if file does not exist, return false
@@ -288,20 +315,41 @@ class Workload():
         folder_path = os.path.join(self.root, 'CanonicalCountTruth')
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
-        file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + '.pt'
+
+        suffix = '_node_feat' if self.node_feat else ''
+        
+        if query_ids is None and queries is not None:
+            # use queries
+            file_name = 'query_num_{:d}_'.format(len(queries)) + 'query_len_sum_' + str(sum([len(g) for g in queries])) + suffix + '.pt'
+        elif query_ids is not None and queries is None:
+            file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + suffix + '.pt'
+        elif queries is not None and query_ids is not None:
+            raise ValueError('nx_queries and atlas_query_ids cannot be both empty')
+        else:
+            raise ValueError('nx_queries and atlas_query_ids cannot be both None')
+
         if os.path.exists(os.path.join(folder_path, file_name)):
             return torch.load(os.path.join(folder_path, file_name))
         else:
             raise NotImplementedError
 
-    def exist_groundtruth(self, query_ids):
+    def exist_groundtruth(self, query_ids, queries= None):
         '''
         check if ground truth exists
         '''
-        if query_ids is None:
-            return False
         folder_path = os.path.join(self.root, 'CanonicalCountTruth')
-        file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + '.pt'
+        suffix = '_node_feat' if self.node_feat else ''
+
+        if query_ids is None and queries is not None:
+            # use queries
+            file_name = 'query_num_{:d}_'.format(len(queries)) + 'query_len_sum_' + str(sum([len(g) for g in queries])) + suffix + '.pt'
+        elif query_ids is not None and queries is None:
+            file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + suffix + '.pt'
+        elif queries is not None and query_ids is not None:
+            raise ValueError('nx_queries and atlas_query_ids cannot be both empty')
+        else:
+            raise ValueError('nx_queries and atlas_query_ids cannot be both None')
+
         return os.path.exists(os.path.join(folder_path, file_name))
 
     def compute_groundtruth(self, query_ids= None, queries= None, num_workers= -1, save_to_file= True):
@@ -315,8 +363,17 @@ class Workload():
         
         if query_ids is not None:
             # gen queries based on query_id
+            # TODO: deprecate the query-id based ground truth computation
             queries = [graph_atlas_plus(i) for i in query_ids]
-            use_query_ids = True
+            if self.node_feat:
+                new_queries = []
+                for query in queries:
+                    new_queries.extend(add_node_feat_to_networkx(query, [t for t in np.eye(self.node_feat_len).tolist()], self.node_feat_key))
+                queries = new_queries
+                query_ids = [-i for i in range(len(queries))]
+                use_query_ids = False
+            else:
+                use_query_ids = True
         elif queries is not None:
             # gen query_ids based on queries
             query_ids = [-i for i in range(len(queries))]
@@ -324,7 +381,12 @@ class Workload():
         
         # convert dataset
         if self.nx_targets is None:
-            self.nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
+            self.nx_targets = [pyg.utils.to_networkx(g, to_undirected=True, node_attrs=['x'] if self.node_feat else None) if type(g)==pyg.data.Data else g for g in self.dataset]
+        if self.node_feat:
+            # TODO: make it better. Now, force change the name of node feat from 'x' to 'feat' and make it as tensor
+            for graph in self.nx_targets:
+                for n, data in graph.nodes(data=True):
+                    data["feat"] = data.pop('x')
         
         nx_targets = [g.copy() for g in self.nx_targets] # make copy so that count_qid is not stored
 
@@ -341,14 +403,15 @@ class Workload():
         # compute symmetry_factor
         symmetry_factors = dict()
         for qid, query in zip(query_ids, queries):
-            symmetry_factors[qid] = SymmetricFactor(query)
+            symmetry_factors[qid] = SymmetricFactor(query, self.node_feat_key)
 
         # generate groundtruth tasks
         print('create tasks')
         tasks = []
+
         for tid, target in enumerate(nx_targets):
             for qid, query in zip(query_ids, queries):
-                tasks.append((tid, target, qid, query)) # copy graphs to ensure no dependency
+                tasks.append((tid, target, qid, query, self.node_feat_key)) # copy graphs to ensure no dependency
 
         start_time = time.time()
         get_results = 0
@@ -373,6 +436,13 @@ class Workload():
         if not self.query_ids == query_ids:
             raise NotImplementedError
 
+        # convert target graph's node feature to tensor
+        if self.node_feat:
+            for graph in nx_targets:
+                for n, data in graph.nodes(data=True):
+                    if type(data[self.node_feat_key]) != torch.Tensor:
+                        data[self.node_feat_key] = torch.tensor(data[self.node_feat_key])
+
         count_motif = []
         for graph in nx_targets:
             for node in graph.nodes:
@@ -384,14 +454,17 @@ class Workload():
         count_motif = torch.tensor(count_motif)
         # self.canonical_count_truth = count_motif
 
+        self.nx_targets = nx_targets
+
         if save_to_file:
             folder_path = os.path.join(self.root, 'CanonicalCountTruth')
+            suffix = '_node_feat' if self.node_feat else ''
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
             if use_query_ids:
-                file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + '.pt'
+                file_name = 'query_num_{:d}_'.format(len(query_ids)) + 'atlas_ids_' + '_'.join(map(str, query_ids[:self.max_file_name_len])) + suffix + '.pt'
             else:
-                file_name = 'query_num_{:d}_'.format(len(queries)) + 'query_len_sum_' + str(sum([len(g) for g in queries])) + '.pt'
+                file_name = 'query_num_{:d}_'.format(len(queries)) + 'query_len_sum_' + str(sum([len(g) for g in queries])) + suffix + '.pt'
             torch.save(count_motif, os.path.join(folder_path, file_name))
 
         return count_motif
@@ -437,7 +510,7 @@ class Workload():
         len_neighbor =  max(nx.diameter(query) for query in queries)
         # len_neighbor = 11 # debug
         print('neighborhood_length:', len_neighbor)
-        nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in dataset]
+        nx_targets = [pyg.utils.to_networkx(g, to_undirected=True, node_attrs=['x'] if self.node_feat else None) if type(g)==pyg.data.Data else g for g in dataset]
         if self.order_by_degree: 
             nx_targets = [nx.convert_node_labels_to_integers(g, first_label=0, ordering="decreasing degree") for g in nx_targets] # relabel nodes of graphs according to their degree
             self.name += "_sort"
@@ -566,7 +639,7 @@ class Workload():
         print("workload generation is done")
 
     def to_networkx(self):
-        nx_targets = [pyg.utils.to_networkx(g, to_undirected=True) if type(g)==pyg.data.Data else g for g in self.dataset]
+        nx_targets = [pyg.utils.to_networkx(g, to_undirected=True, node_attrs=['x'] if self.node_feat else None) if type(g)==pyg.data.Data else g for g in self.dataset]
         return nx_targets
 
     def save(self, root_folder: str = None):

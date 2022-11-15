@@ -276,8 +276,8 @@ def NetworkxToHetero(nx_graph: Union[nx.Graph, nx.DiGraph], type_key: str = 'typ
     for node_type, node_dict in hetero_node_dict.items():
         node_list = list(node_dict.items())
         node_list.sort(key = lambda x: x[1])
-        node_feat_x = []
-        node_attr_pyg = defaultdict(list)
+        node_feats_x = []
+        node_attrs_pyg = defaultdict(list)
 
         node_attrs = list(next(iter(nx_graph.nodes(data=True)))[-1].keys()) # get node attrs in a list
         node_attrs.remove(type_key) # node type key
@@ -289,14 +289,20 @@ def NetworkxToHetero(nx_graph: Union[nx.Graph, nx.DiGraph], type_key: str = 'typ
 
         for node,i in node_list:
             if feat_key is not None:
-                node_feat_x.append(nx_graph.nodes[node][feat_key].view(-1))
+                node_feat_x = nx_graph.nodes[node][feat_key]
+                if type(node_feat_x) != torch.Tensor:
+                    node_feat_x = torch.tensor(node_feat_x)
+                node_feats_x.append(node_feat_x.view(-1))
             for attr in node_attrs:
-                node_attr_pyg[attr].append(nx_graph.nodes[node][attr].view(-1))
+                node_attr_pyg = nx_graph.nodes[node][attr]
+                if type(node_attr_pyg) != torch.Tensor:
+                    node_attr_pyg = torch.tensor(node_attr_pyg)
+                node_attrs_pyg[attr].append(node_attr_pyg.view(-1))
 
         if feat_key is not None:
-            hetero_graph[node_type].node_feature = torch.stack(node_feat_x, dim=0)
+            hetero_graph[node_type].node_feature = torch.stack(node_feats_x, dim=0)
         for attr in node_attrs:
-            setattr(hetero_graph[node_type], attr, torch.stack(node_attr_pyg[attr], dim=0))
+            setattr(hetero_graph[node_type], attr, torch.stack(node_attrs_pyg[attr], dim=0))
 
     for edge_type, edge_list in hetero_edge_dict.items():
         hetero_graph[edge_type[0], edge_type[1], edge_type[2]].edge_index = torch.tensor(edge_list).T

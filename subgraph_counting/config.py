@@ -13,6 +13,8 @@ def parse_neighborhood(parser, arg_str=None):
                         help='Training batch size')
     enc_parser.add_argument('--n_layers', type=int,
                         help='Number of graph conv layers')
+    enc_parser.add_argument('--input_dim', type=int,
+                        help='Training input size')
     enc_parser.add_argument('--hidden_dim', type=int,
                         help='Training hidden size')
     enc_parser.add_argument('--dropout', type=float,
@@ -33,14 +35,18 @@ def parse_neighborhood(parser, arg_str=None):
                         help='number of epochs')
     enc_parser.add_argument('--depth', type=int,
                         help='depth of the neighborhood')
+    enc_parser.add_argument('--use_node_feature', action="store_true",
+                        help='whether to use node features')
     
     enc_parser.set_defaults(
         conv_type='SAGE',
         n_layers=8,
+        input_dim=3,
         hidden_dim=64,
         use_hetero=True,
         use_tconv=True,
-        zero_node_feat=True,
+        # zero_node_feat=True,
+        use_node_feature=True,
         depth=4,
         
         opt='adam',   # opt_enc_parser
@@ -48,10 +54,10 @@ def parse_neighborhood(parser, arg_str=None):
         opt_restart=100,
         weight_decay=0.0,
         lr=1e-4,
-        num_epoch = 300,
+        num_epoch = 1,
         
         n_workers=4,
-        model_path="ckpt/neighborhood",
+        model_path="ckpt/neighborhood/runtime",
         dropout=0.0
     )
 
@@ -129,6 +135,8 @@ def parse_optimizer(parser):
                         help='batch size of neighborhood counting')
     opt_parser.add_argument('--gossip_batch_size', type=int,
                         help='batch size of gossip counting')
+    opt_parser.add_argument('--num_cpu', type=int,
+                        help='number of cpu to use')
 
 #     opt_parser.add_argument('--opt', dest='opt', type=str,
 #             help='Type of optimizer')
@@ -148,10 +156,12 @@ def parse_optimizer(parser):
 #             help='Optimizer weight decay.')
 
     opt_parser.set_defaults(
-        train_dataset='syn_6400',
+        # train_dataset='syn_6400',
+        train_dataset='ENZYMES',
         test_dataset='ENZYMES',
-        gpu=0,
+        gpu=1,
 
         neighborhood_batch_size=64,
-        gossip_batch_size=64
+        gossip_batch_size=64,
+        num_cpu=4,
     )

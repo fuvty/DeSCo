@@ -16,7 +16,8 @@ import numpy as np
 import random
 import scipy.stats as stats
 from tqdm import tqdm
-
+from typing import List
+import itertools
 import matplotlib.pyplot as plt
 
 def sample_neigh(graphs, size):
@@ -225,3 +226,17 @@ def relabel_dsgraph(data: DSGraph):
     data.edge_index = map[edge_index] # relabel edge_index
     if has_y:
         data.node_label = node_label[map,:]
+
+def add_node_feat_to_networkx(graph: nx.Graph, node_feats: List[torch.Tensor], node_feat_key: str = 'feat'):
+    num_node = len(graph.nodes)
+    num_feat = len(node_feats)
+
+    num_results = num_feat ** num_node
+
+    output_graphs = [graph.copy() for i in range(num_results)]
+
+    for i,feats in enumerate(itertools.product(node_feats, repeat=num_node)):
+        for n, feat in enumerate(feats):
+            output_graphs[i].nodes[n][node_feat_key] = feat
+
+    return output_graphs

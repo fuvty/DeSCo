@@ -19,21 +19,29 @@ from torch_geometric.loader import DataLoader
 from subgraph_counting.gnn_model import BaseGNN
 from subgraph_counting.transforms import NetworkxToHetero
 from subgraph_counting.workload import graph_atlas_plus
+from subgraph_counting.utils import add_node_feat_to_networkx
 
-
-def gen_queries(query_ids: List[int], queries=None, transform=None) -> Tuple[List[pyg.data.data.Data], List[nx.Graph]]:
+def gen_queries(query_ids: List[int], queries=None, transform=None, node_feat_len : int = 1) -> Tuple[List[pyg.data.data.Data], List[nx.Graph]]:
     '''
     generate queries according to the atlas ids
     return a list of PyG graphs and a list of networkx graphs
     '''
-    # begin {query}, commonly used for all
-    # convert nx_graph queries to pyg
-    queries_nx = [graph_atlas_plus(query_id) for query_id in query_ids]
+    if queries is None:
+        # TODO: deprecate the query_ids based query generation
+        # convert nx_graph queries to pyg
+        queries_nx = [graph_atlas_plus(query_id) for query_id in query_ids]
+        if node_feat_len != 1:
+            # exist node feat
+            queries_nx_with_feat = []
+            for query_nx in queries_nx:
+                queries_nx_with_feat.extend(add_node_feat_to_networkx(query_nx, [t for t in np.eye(node_feat_len).tolist()], node_feat_key='feat'))
+            queries_nx = queries_nx_with_feat
+    else:
+        queries_nx = queries
     queries_pyg = [NetworkxToHetero(query, type_key= 'type', feat_key= 'feat') for query in queries_nx]
     
-    for query_pyg in queries_pyg:
-        query_pyg['union_node'].node_feature = torch.zeros((query_pyg['union_node'].num_nodes, 1))
-    # end {query}, commonly used for all
+    # for query_pyg in queries_pyg:
+        # query_pyg['union_node'].node_feature = torch.zeros((query_pyg['union_node'].num_nodes, 1))
 
     if transform is not None:
         queries_pyg = [transform(query_pyg) for query_pyg in queries_pyg]
@@ -58,7 +66,8 @@ class NeighborhoodCountingModel(pl.LightningModule):
         self.kwargs = kwargs
         self.args = args
         self.query_loader = None
-        self.hidden_dim = hidden_dim 
+        self.hidden_dim = hidden_dim
+        self.input_dim = input_dim 
 
         self.save_hyperparameters()
 
@@ -200,7 +209,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
         return loss
 
     def set_queries(self, query_ids, queries=None, transform=None):
-        queries_pyg, queries_nx = gen_queries(query_ids, queries, transform=transform)
+        queries_pyg, queries_nx = gen_queries(query_ids, queries, transform=transform, node_feat_len=self.input_dim)
         min_len_neighbor =  max(nx.diameter(query) for query in queries_nx)
         if self.args.depth < min_len_neighbor:
             warnings.warn("neighborhood diameter {:d} is too small for the queries, the minimum is {:d}".format(self.args.depth, min_len_neighbor))
