@@ -41,19 +41,19 @@ Our model achieves the following performance. The numbers are normalized MSEs of
 
 ### MUTAG
 
- Query-Size   | 3       | 4       | 5       
+ Query-Size   | 3       | 4       | 5  
 ------------|:-------:|:-------:|:-------:
- DeSCo | 7.3E-05 | 5.2E-04 | 1.1E-02 
+ DeSCo | 7.3E-05 | 5.2E-04 | 1.1E-02
 
 ### COX2
 
- Query-Size   | 3       | 4       | 5       
+ Query-Size   | 3       | 4       | 5  
 ------------|:-------:|:-------:|:-------:
  DeSCo | 2.3E-05 | 9.5E-05 | 7.2E-03
 
 ### ENZYMES
 
- Query-Size   | 3       | 4       | 5       
+ Query-Size   | 3       | 4       | 5  
 ------------|:-------:|:-------:|:-------:
  DeSCo | 1.1E-03 | 2.0E-03 | 1.0E-02
 
