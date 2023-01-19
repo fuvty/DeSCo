@@ -74,10 +74,15 @@ def GenVMap(subgraph: nx.Graph, graph: nx.Graph, node_feat_key: str = None) -> l
     maps = [dict(zip(map.values(), map.keys())) for map in SBM_iter]
     return maps
 
-def load_data(dataset_name: str, n_neighborhoods= -1, transform= None):
+def load_data(dataset_name: str, n_neighborhoods= -1, transform= None, train_split = 0.6):
     # make dir data if not exist
     if not os.path.exists('data'):
         os.makedirs('data')
+
+    dataset_name_full = dataset_name
+    dataset_info = dataset_name.split('_')
+    dataset_name = dataset_info[0]
+    dataset_split = '_'.join(dataset_info[1:]) if len(dataset_info) > 1 else 'full'
 
     # find dataset in the data folder
     if dataset_name == "ENZYMES":
@@ -105,10 +110,24 @@ def load_data(dataset_name: str, n_neighborhoods= -1, transform= None):
     elif dataset_name.split('_')[0] == "syn":
         min_size = 5
         max_size = 41
-        dataset = SyntheticDataset(min_size=min_size, max_size=max_size, graph_num= int(dataset_name.split('_')[1]), root='data/{}'.format(dataset_name), transform= transform)
+        dataset = SyntheticDataset(min_size=min_size, max_size=max_size, graph_num= int(dataset_split.split('_')[0]), root='data/{}'.format(dataset_name_full), transform= transform)
     else:
-        print(dataset_name)
+        print(dataset_name_full)
         raise NotImplementedError
+
+    # TODO: support to define train/test/valid split
+    if dataset_split == 'full':
+        return dataset
+    elif dataset_split == 'train':
+        dataset = [g for g in dataset]
+        random.seed(0)
+        random.shuffle(dataset)
+        return dataset[:int(len(dataset)*train_split)]
+    elif dataset_split == 'test':
+        dataset = [g for g in dataset]
+        random.seed(0)
+        random.shuffle(dataset)
+        return dataset[int(len(dataset)*train_split):]
 
     return dataset
 
