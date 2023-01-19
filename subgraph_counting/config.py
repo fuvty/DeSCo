@@ -4,116 +4,121 @@ from torch.utils.data import dataset
 from subgraph_counting import utils
 
 
-def parse_neighborhood(parser, arg_str=None):
-    enc_parser = parser.add_argument_group()
-    # utils.parse_optimizer(parser)
+def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
+    enc_parser = parser.add_argument_group("neighborhood counting model arguments")
 
-    enc_parser.add_argument("--conv_type", type=str, help="type of convolution")
-    enc_parser.add_argument("--batch_size", type=int, help="Training batch size")
-    enc_parser.add_argument("--n_layers", type=int, help="Number of graph conv layers")
-    enc_parser.add_argument("--input_dim", type=int, help="Training input size")
-    enc_parser.add_argument("--hidden_dim", type=int, help="Training hidden size")
-    enc_parser.add_argument("--dropout", type=float, help="Dropout rate")
+    # general model settings
+    enc_parser.add_argument("--neigh_conv_type", type=str, help="type of convolution")
     enc_parser.add_argument(
-        "--n_batches", type=int, help="Number of training minibatches"
+        "--neigh_layer_num", type=int, help="Number of graph conv layers"
     )
-    enc_parser.add_argument("--model_path", type=str, help="path to save/load model")
-    enc_parser.add_argument("--opt_scheduler", type=str, help="scheduler name")
+    enc_parser.add_argument("--neigh_input_dim", type=int, help="Training input size")
+    enc_parser.add_argument("--neigh_hidden_dim", type=int, help="Training hidden size")
+    enc_parser.add_argument("--neigh_dropout", type=float, help="Dropout rate")
+    enc_parser.add_argument(
+        "--neigh_model_path", type=str, help="path to save/load model"
+    )
+    enc_parser.add_argument(
+        "--neigh_epoch_num", type=int, help="number of training epochs"
+    )
+
+    # DeSCo sepecific settings
+    enc_parser.add_argument(
+        "--depth", type=int, help="depth of the canonical neighborhood"
+    )
     enc_parser.add_argument(
         "--use_hetero", action="store_true", help="whether to use heterogeneous GNNs"
     )
     enc_parser.add_argument(
+        "-t",
         "--use_tconv",
         action="store_true",
         help="whether to use triangle convolution (a case of SHMP)",
     )
     enc_parser.add_argument(
+        "-z",
         "--zero_node_feat",
         action="store_true",
-        help="whether to zero out node features",
+        help="whether to zero out existing node features",
     )
-    enc_parser.add_argument("--num_epoch", type=int, help="number of epochs")
-    enc_parser.add_argument("--depth", type=int, help="depth of the neighborhood")
     enc_parser.add_argument(
-        "--use_node_feature", action="store_true", help="whether to use node features"
+        "-f",
+        "--use_node_feature",
+        action="store_true",
+        help="whether to use node features",
     )
+
+    # optimizer settings
+    enc_parser.add_argument("--neigh_weight_decay", type=float, help="weight decay")
+    enc_parser.add_argument("--neigh_lr", type=float, help="learning rate")
 
     enc_parser.set_defaults(
-        conv_type="SAGE",
-        n_layers=8,
-        input_dim=3,
-        hidden_dim=64,
+        neigh_conv_type="SAGE",
+        neigh_layer_num=8,
+        neigh_input_dim=1,
+        neigh_hidden_dim=64,
+        neigh_dropout=0.0,
+        neigh_model_path="ckpt/kdd23/neighborhood",
+        neigh_epoch_num=300,
+        depth=4,
         use_hetero=True,
         use_tconv=True,
-        # zero_node_feat=True,
-        use_node_feature=True,
-        depth=4,
-        opt="adam",  # opt_enc_parser
-        opt_scheduler="none",
-        opt_restart=100,
-        weight_decay=0.0,
-        lr=1e-4,
-        num_epoch=1,
-        n_workers=4,
-        model_path="ckpt/neighborhood/runtime",
-        dropout=0.0,
+        zero_node_feat=True,
+        use_node_feature=False,
+        neigh_weight_decay=0.0,
+        neigh_lr=1e-4,
     )
 
+    # TODO: add the following arguments
+    # opt_enc_parser
+    # opt="adam",
+    # opt_scheduler="none",
+    # opt_restart=100,
 
-def parse_gossip(parser, arg_str=None):
-    gos_parser = parser.add_argument_group()
-    # utils.parse_optimizer(parser)
+    # return the keys of the parser
+    return enc_parser._group_actions
 
-    gos_parser.add_argument("--conv_type", type=str, help="type of convolution")
-    gos_parser.add_argument("--method_type", type=str, help="type of embedding")
-    gos_parser.add_argument("--batch_size", type=int, help="Training batch size")
-    gos_parser.add_argument("--n_layers", type=int, help="Number of graph conv layers")
-    gos_parser.add_argument("--hidden_dim", type=int, help="Training hidden size")
-    # enc_parser.add_argument('--skip', type=str,
-    #                     help='"all" or "last"')
-    gos_parser.add_argument("--dropout", type=float, help="Dropout rate")
+
+def parse_gossip(parser, arg_str=None) -> list[argparse._StoreAction]:
+    gos_parser = parser.add_argument_group("gossip counting model arguments")
+
+    # general model settings
+    gos_parser.add_argument("--gossip_conv_type", type=str, help="type of convolution")
     gos_parser.add_argument(
-        "--n_batches", type=int, help="Number of training minibatches"
+        "--gossip_layer_num", type=int, help="Number of graph conv layers"
     )
-    gos_parser.add_argument("--margin", type=float, help="margin for loss")
-    gos_parser.add_argument("--dataset", type=str, help="Dataset")
-    gos_parser.add_argument("--test_set", type=str, help="test set filename")
     gos_parser.add_argument(
-        "--eval_interval", type=int, help="how often to eval during training"
+        "--gossip_hidden_dim", type=int, help="Training hidden size"
     )
-    gos_parser.add_argument("--val_size", type=int, help="validation set size")
-    gos_parser.add_argument("--model_path", type=str, help="path to save/load model")
-    gos_parser.add_argument("--opt_scheduler", type=str, help="scheduler name")
+    gos_parser.add_argument("--gossip_dropout", type=float, help="Dropout rate")
     gos_parser.add_argument(
-        "--node_anchored",
-        action="store_true",
-        help="whether to use node anchoring in training",
+        "--gossip_model_path", type=str, help="path to save/load model"
     )
-    gos_parser.add_argument("--test", action="store_true")
-    gos_parser.add_argument("--n_workers", type=int)
-    gos_parser.add_argument("--tag", type=str, help="tag to identify the run")
+    gos_parser.add_argument(
+        "--gossip_epoch_num", type=int, help="number of training epochs"
+    )
 
-    gos_parser.add_argument("--use_centrality", type=bool)
+    # optimizer settings
+    gos_parser.add_argument("--gossip_lr", type=float, help="learning rate")
+    gos_parser.add_argument("--weight_decay", type=float, help="weight decay")
 
     gos_parser.set_defaults(
-        conv_type="GOSSIP",
-        n_layers=2,
-        hidden_dim=64,
-        dropout=0.0,
-        n_workers=4,
-        model_path="ckpt/gossip",
-        # model_path="ckpt/general/gossip/tmp.pt",
-        lr=1e-3,
-        num_epoch=50,
+        gossip_conv_type="GOSSIP",
+        gossip_layer_num=2,
+        gossip_hidden_dim=64,
+        gossip_dropout=0.01,
+        gossip_model_path="ckpt/kdd23/gossip",
+        gossip_epoch_num=30,
+        gossip_lr=1e-3,
         weight_decay=0.0,
-        # n_neighborhoods= 64*100,
-        n_neighborhoods=64 * 100,
-        use_log=True,
     )
 
+    # return the namespace of the parser
+    return gos_parser._group_actions
 
-def parse_optimizer(parser):
-    opt_parser = parser.add_argument_group()
+
+def parse_optimizer(parser) -> list[argparse._StoreAction]:
+    opt_parser = parser.add_argument_group("optimizer arguments")
 
     opt_parser.add_argument(
         "--train_dataset", type=str, help="name of the training dataset"
@@ -149,11 +154,13 @@ def parse_optimizer(parser):
     #             help='Optimizer weight decay.')
 
     opt_parser.set_defaults(
-        # train_dataset='syn_6400',
-        train_dataset="ENZYMES",
+        train_dataset="syn_128",
         test_dataset="ENZYMES",
-        gpu=1,
+        gpu=0,
         neighborhood_batch_size=64,
         gossip_batch_size=64,
         num_cpu=4,
     )
+
+    # return the keys of the parser
+    return opt_parser._group_actions

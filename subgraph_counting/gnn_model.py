@@ -17,13 +17,13 @@ class BaseGNN(nn.Module):
         """
         init baseline GNN with the following args:
         dropout: dropout rate
-        n_layers: number of layers
+        layer_num: number of layers
         conv_type: type of convolution
         use_hetero: whether to use heterogeneous convolution
         """
         super(BaseGNN, self).__init__()
         self.dropout = args.dropout
-        self.n_layers = args.n_layers
+        self.layer_num = args.layer_num
         self.conv_type = args.conv_type
         self.use_hetero = args.use_hetero
 
@@ -108,7 +108,7 @@ class BaseGNNCore(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, args, **kwargs):
         super(BaseGNNCore, self).__init__()
         self.dropout = args.dropout
-        self.n_layers = args.n_layers
+        self.layer_num = args.layer_num
         self.conv_type = args.conv_type
         self.use_hetero = args.use_hetero
         # self.baseline = kwargs['baseline']
@@ -131,7 +131,7 @@ class BaseGNNCore(nn.Module):
 
         self.input_pattern_emb = False  # init with false, if input_pattern_emb is in kwargs, then set to True
 
-        for l in range(args.n_layers):
+        for l in range(args.layer_num):
             hidden_input_dim = hidden_dim
             if l == 0:
                 try:
@@ -192,7 +192,7 @@ class BaseGNNCore(nn.Module):
                 else:
                     raise NotImplementedError
 
-        self.post_input_dim = hidden_dim * args.n_layers + pre_dim_out
+        self.post_input_dim = hidden_dim * args.layer_num + pre_dim_out
 
         # self.batch_norm = nn.BatchNorm1d(output_dim, eps=1e-5, momentum=0.1)
         self.conv_type = args.conv_type

@@ -45,7 +45,7 @@ def main(
     train the model and test accorrding to the config
     """
 
-    # define queries
+    # define queries by atlas ids or networkx graphs
     if nx_queries is None and atlas_query_ids is not None:
         if args_neighborhood.use_node_feature:
             # TODO: remove this in future implementations
@@ -160,7 +160,7 @@ def main(
 
     # define neighborhood counting model
     neighborhood_trainer = pl.Trainer(
-        max_epochs=args_neighborhood.num_epoch,
+        max_epochs=args_neighborhood.epoch_num,
         accelerator="gpu",
         devices=[args_opt.gpu],
         default_root_dir=args_neighborhood.model_path,
@@ -241,7 +241,7 @@ def main(
         gossip_model.set_query_emb(neighborhood_model.get_query_emb())
 
         gossip_trainer = pl.Trainer(
-            max_epochs=args_gossip.num_epoch,
+            max_epochs=args_gossip.epoch_num,
             accelerator="gpu",
             devices=[args_opt.gpu],
             default_root_dir=args_gossip.model_path,
@@ -322,30 +322,52 @@ def main(
 
 if __name__ == "__main__":
     # load parameters
-    parser = argparse.ArgumentParser(description="Neighborhood embedding arguments")
-    parse_optimizer(parser)
-    args_opt = parser.parse_args()
+    parser = argparse.ArgumentParser(description="DeSCo argument parser")
 
-    # define neighborhood counting model
-    parse_neighborhood(parser)
-    args_neighborhood = parser.parse_args()
+    # define optimizer arguments
+    _optimizer_actions = parse_optimizer(parser)
 
-    # define gossip counting model
-    parser = argparse.ArgumentParser(
-        description="Neighborhood embedding arguments"
-    )  # TODO: cannot use parse_gossip in command line, conflict with args_neighborhood
-    parse_gossip(parser)
-    args_gossip = parser.parse_args()
+    # define neighborhood counting model arguments
+    _neighbor_actions = parse_neighborhood(parser)
 
-    # debug; TODO: the following restrictions are added because of the limited implemented senarios
+    # define gossip counting model arguments
+    _gossip_actions = parse_gossip(parser)
+
+    # assign the args to args_neighborhood, args_gossip, and args_opt without the prefix 'neigh_' and 'gossip_'
+    args = parser.parse_args()
+    print(args)
+    args_neighborhood = argparse.Namespace()
+    args_gossip = argparse.Namespace()
+    args_opt = argparse.Namespace()
+    for action in _optimizer_actions:
+        setattr(args_opt, action.dest, getattr(args, action.dest))
+    for action in _neighbor_actions:
+        prefix = "neigh_"
+        setattr(
+            args_neighborhood,
+            action.dest[len(prefix) :]
+            if action.dest.startswith(prefix)
+            else action.dest,
+            getattr(args, action.dest),
+        )
+    for action in _gossip_actions:
+        prefix = "gossip_"
+        setattr(
+            args_gossip,
+            action.dest[len(prefix) :]
+            if action.dest.startswith(prefix)
+            else action.dest,
+            getattr(args, action.dest),
+        )
+
+    # noqa: the following restrictions are added because of the limited implemented senarios
     assert args_neighborhood.use_hetero == True
 
-    # neighborhood_checkpoint = 'ckpt/neighborhood/sage_tconv_main.ckpt'
-    neighborhood_checkpoint = "ckpt/neighborhood/sage_tconv_main.ckpt"
-    gossip_checkpoint = (
-        "ckpt/gossip/migrate/lightning_logs/version_0/checkpoints/epoch=0-step=600.ckpt"
-    )
+    # noqa: if need to load from checkpoint, please specify the checkpoint path
+    # neighborhood_checkpoint = "ckpt/neighborhood/sage_tconv_main.ckpt"
+    # gossip_checkpoint = "ckpt/gossip/migrate/lightning_logs/version_0/checkpoints/epoch=0-step=600.ckpt"
 
+    # define the query graphs
     query_ids = gen_query_ids(query_size=[3, 4, 5])
     # query_ids = [6]
     nx_queries = [nx.graph_atlas(i) for i in query_ids]
@@ -384,11 +406,11 @@ if __name__ == "__main__":
         args_neighborhood,
         args_gossip,
         args_opt,
-        train_neighborhood=False,
-        train_gossip=False,
+        train_neighborhood=True,
+        train_gossip=True,
         test_gossip=True,
-        neighborhood_checkpoint=neighborhood_checkpoint,
-        gossip_checkpoint=gossip_checkpoint,
+        # neighborhood_checkpoint=neighborhood_checkpoint,
+        # gossip_checkpoint=gossip_checkpoint,
         nx_queries=nx_queries,
         atlas_query_ids=query_ids,
     )

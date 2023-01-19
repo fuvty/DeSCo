@@ -65,7 +65,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
     def __init__(self, input_dim, hidden_dim, args, **kwargs):
         """
         init the model using the following args:
-        n_layers: number of layers
+        layer_num: number of layers
         hidden_dim: the hidden dimension of the model
         conv_type: type of convolution
         use_hetero: whether to use heterogeneous convolution
