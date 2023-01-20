@@ -91,10 +91,15 @@ def load_data(dataset_name: str, n_neighborhoods=-1, transform=None, train_split
     if not os.path.exists("data"):
         os.makedirs("data")
 
-    dataset_name_full = dataset_name
-    dataset_info = dataset_name.split("_")
-    dataset_name = dataset_info[0]
-    dataset_split = "_".join(dataset_info[1:]) if len(dataset_info) > 1 else "full"
+    # find "train" or "test" in the dataset name
+    if "train" in dataset_name:
+        dataset_split = "train"
+        dataset_name = dataset_name.split("_train")[0]
+    elif "test" in dataset_name:
+        dataset_split = "test"
+        dataset_name = dataset_name.split("_test")[0]
+    else:
+        dataset_split = None
 
     # find dataset in the data folder
     if dataset_name == "ENZYMES":
@@ -129,16 +134,16 @@ def load_data(dataset_name: str, n_neighborhoods=-1, transform=None, train_split
         dataset = SyntheticDataset(
             min_size=min_size,
             max_size=max_size,
-            graph_num=int(dataset_split.split("_")[0]),
-            root="data/{}".format(dataset_name_full),
+            graph_num=int(dataset_name.split("_")[1]),
+            root="data/{}".format(dataset_name),
             transform=transform,
         )
     else:
-        print(dataset_name_full)
+        print(dataset_name)
         raise NotImplementedError
 
     # TODO: support to define train/test/valid split
-    if dataset_split == "full":
+    if dataset_split is None:
         return dataset
     elif dataset_split == "train":
         dataset = [g for g in dataset]
@@ -150,6 +155,9 @@ def load_data(dataset_name: str, n_neighborhoods=-1, transform=None, train_split
         random.seed(0)
         random.shuffle(dataset)
         return dataset[int(len(dataset) * train_split) :]
+    else:
+        print(dataset_name, " does not confirms to the naming convention")
+        raise NotImplementedError
 
     return dataset
 
