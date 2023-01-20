@@ -128,6 +128,10 @@ def load_data(dataset_name: str, n_neighborhoods=-1, transform=None, train_split
     elif dataset_name == "ZINC":
         raise NotImplementedError
         # dataset = MoleculeDataset(root='data/ZINC', name='ZINC', transform= transform)
+    elif dataset_name == "IMDB-BINARY":
+        dataset = TUDataset(
+            root="data/IMDB-BINARY", name="IMDB-BINARY", transform=transform
+        )
     elif dataset_name.split("_")[0] == "syn":
         min_size = 5
         max_size = 41
