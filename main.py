@@ -7,7 +7,7 @@ sys.path.append(parentdir)
 import argparse
 import datetime
 from typing import List, Optional, Tuple, Union
-
+import pickle
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -40,6 +40,7 @@ def main(
     gossip_checkpoint=None,
     nx_queries: List[nx.Graph] = None,
     atlas_query_ids: List[int] = None,
+    output_dir: str = "results/raw",
 ):
     """
     train the model and test accorrding to the config
@@ -260,7 +261,17 @@ def main(
         gossip_trainer.test(gossip_model, dataloaders=gossip_test_dataloader)
 
     ########### output graphlet results ###########
-    time = datetime.datetime.now().strftime("%Y%m%d_%H:%M:%S")
+    # configurations
+    file_name = "config_{}.txt".format(args_opt.test_dataset)
+    with open(os.path.join(output_dir, file_name), "w") as f:
+        f.write("args_opt: \n")
+        f.write(str(args_opt))
+        f.write("\nargs_neighborhood:\n")
+        f.write(str(args_neighborhood))
+        f.write("\nargs_gossip:\n")
+        f.write(str(args_gossip))
+        f.write("\ntime:\n")
+        f.write(str(datetime.datetime.now()))
 
     neighborhood_count_test = torch.cat(
         neighborhood_trainer.predict(neighborhood_model, neighborhood_test_dataloader),
@@ -271,18 +282,18 @@ def main(
             neighborhood_count_test
         )
     )  # user can get the graphlet count of each graph in this way
+
+    # graphlet count after neighborhood counting
+    file_name = "neighborhood_graphlet_{}.csv".format(args_opt.test_dataset)
     pd.DataFrame(
         torch.round(F.relu(graphlet_neighborhood_count_test)).detach().cpu().numpy()
     ).to_csv(
-        os.path.join(
-            "results/raw_results",
-            "neighborhood_{}_{}_{}.csv".format(
-                args_neighborhood.conv_type, args_opt.test_dataset, time
-            ),
-        )
+        os.path.join(output_dir, file_name)
     )  # save the inferenced results to csv file
 
+    # graphlet count after gossip counting
     if not skip_gossip:
+        file_name = "gossip_graphlet_{}.csv".format(args_opt.test_dataset)
         gossip_count_test = torch.cat(
             gossip_trainer.predict(gossip_model, gossip_test_dataloader), dim=0
         )
@@ -292,29 +303,28 @@ def main(
         pd.DataFrame(
             torch.round(F.relu(graphlet_gossip_count_test)).detach().cpu().numpy()
         ).to_csv(
-            os.path.join(
-                "results/raw_results",
-                "gossip_{}_{}_{}.csv".format(
-                    args_gossip.conv_type, args_opt.test_dataset, time
-                ),
-            )
+            os.path.join(output_dir, file_name)
         )  # save the inferenced results to csv file
 
-    # analysis: node level analysis
+    # node level count after neighborhood counting
+    file_name = "neighborhood_node_{}".format(args_opt.test_dataset)
     pd.DataFrame(neighborhood_count_test.detach().cpu().numpy()).to_csv(
-        os.path.join("tmp", args_opt.test_dataset, "neighbor_count_results.csv")
+        os.path.join(output_dir, file_name + "_results.csv")
     )  # save the inferenced results to csv file
     pd.DataFrame(test_workload.neighborhood_dataset.nx_neighs_index).to_csv(
-        os.path.join("tmp", args_opt.test_dataset, "neighbor_count_index.csv")
+        os.path.join(output_dir, file_name + "_index.csv")
     )  # save the inferenced results to csv file
+
+    # node level count after gossip counting
+    file_name = "gossip_node_{}".format(args_opt.test_dataset)
     if not skip_gossip:
         pd.DataFrame(gossip_count_test.detach().cpu().numpy()).to_csv(
-            os.path.join("tmp", args_opt.test_dataset, "gossip_count_results.csv")
+            os.path.join(output_dir, file_name + "_results.csv")
         )  # save the inferenced results to csv file
 
-    import pickle
-
-    with open("tmp/{}/nx.pk".format(args_opt.test_dataset), "wb") as f:
+    # save the test networkx graph
+    file_name = "test_nxgraph_{}.pk".format(args_opt.test_dataset)
+    with open(os.path.join(output_dir, file_name), "wb") as f:
         pickle.dump(test_workload.to_networkx(), f)
 
     print("done")
@@ -364,8 +374,8 @@ if __name__ == "__main__":
     assert args_neighborhood.use_hetero == True
 
     # noqa: if need to load from checkpoint, please specify the checkpoint path
-    # neighborhood_checkpoint = "ckpt/neighborhood/sage_tconv_main.ckpt"
-    # gossip_checkpoint = "ckpt/gossip/migrate/lightning_logs/version_0/checkpoints/epoch=0-step=600.ckpt"
+    neighborhood_checkpoint = args_opt.neigh_checkpoint
+    gossip_checkpoint = args_opt.gossip_checkpoint
 
     # define the query graphs
     query_ids = gen_query_ids(query_size=[3, 4, 5])
@@ -402,15 +412,26 @@ if __name__ == "__main__":
 
     query_ids = None
 
+    # define the output directory
+    if args_opt.output_dir is None:
+        output_dir = "results/kdd23/raw"
+        time = datetime.datetime.now().strftime("%Y%m%d_%H:%M:%S")
+        output_dir = os.path.join(output_dir, time)
+    else:
+        output_dir = args_opt.output_dir
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
     main(
         args_neighborhood,
         args_gossip,
         args_opt,
-        train_neighborhood=True,
-        train_gossip=True,
-        test_gossip=True,
-        # neighborhood_checkpoint=neighborhood_checkpoint,
-        # gossip_checkpoint=gossip_checkpoint,
+        train_neighborhood=args_opt.train_neigh,
+        train_gossip=args_opt.train_gossip,
+        test_gossip=args_opt.test_gossip,
+        neighborhood_checkpoint=neighborhood_checkpoint,
+        gossip_checkpoint=gossip_checkpoint,
         nx_queries=nx_queries,
         atlas_query_ids=query_ids,
+        output_dir=output_dir,
     )

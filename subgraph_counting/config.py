@@ -135,6 +135,28 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
         "--gossip_batch_size", type=int, help="batch size of gossip counting"
     )
     opt_parser.add_argument("--num_cpu", type=int, help="number of cpu to use")
+    opt_parser.add_argument("--output_dir", type=str, help="path to save raw output")
+    opt_parser.add_argument(
+        "--neigh_checkpoint", type=str, help="path to load neighborhood counting model"
+    )
+    opt_parser.add_argument(
+        "--gossip_checkpoint", type=str, help="path to load gossip counting model"
+    )
+    opt_parser.add_argument(
+        "--train_neigh",
+        action="store_true",
+        help="whether to train neighborhood counting model",
+    )
+    opt_parser.add_argument(
+        "--train_gossip",
+        action="store_true",
+        help="whether to train gossip counting model",
+    )
+    opt_parser.add_argument(
+        "--test_gossip",
+        action="store_true",
+        help="whether to test gossip counting model",
+    )
 
     #     opt_parser.add_argument('--opt', dest='opt', type=str,
     #             help='Type of optimizer')
@@ -160,6 +182,12 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
         neighborhood_batch_size=64,
         gossip_batch_size=64,
         num_cpu=4,
+        output_dir=None,
+        neigh_checkpoint=None,
+        gossip_checkpoint=None,
+        train_neigh=False,
+        train_gossip=False,
+        test_gossip=True,
     )
 
     # return the keys of the parser
