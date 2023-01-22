@@ -16,6 +16,8 @@ import torch.nn.functional as F
 import torch_geometric as pyg
 from torch_geometric.loader import DataLoader
 
+from torch_geometric.data import Batch
+
 from subgraph_counting.gnn_model import BaseGNN
 from subgraph_counting.transforms import NetworkxToHetero
 from subgraph_counting.workload import graph_atlas_plus
@@ -99,16 +101,18 @@ class NeighborhoodCountingModel(pl.LightningModule):
             nn.Linear(4 * args.hidden_dim, 1),
         )
 
-    def training_step(self, batch, batch_idx):
-        return self.train_forward(batch, batch_idx)
-
-    def test_step(self, batch, batch_idx):
-        loss = self.test_forward(batch, batch_idx)
-        self.log("neighborhood_counting_test_loss", loss, batch_size=64)
-
-    def validation_step(self, batch, batch_idx):
+    def training_step(self, batch: Batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
-        self.log("neighborhood_counting_val_loss", loss, batch_size=64)
+        self.log("neighborhood_counting_train_loss", loss, batch_size=batch.num_graphs)
+        return loss
+
+    def test_step(self, batch: Batch, batch_idx):
+        loss = self.test_forward(batch, batch_idx)
+        self.log("neighborhood_counting_test_loss", loss, batch_size=batch.num_graphs)
+
+    def validation_step(self, batch: Batch, batch_idx):
+        loss = self.train_forward(batch, batch_idx)
+        self.log("neighborhood_counting_val_loss", loss, batch_size=batch.num_graphs)
 
     # def configure_optimizers(self):
     #     optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
@@ -149,7 +153,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
             count = self.count_model(embs)
         return count
 
-    def predict_step(self, batch, batch_idx) -> torch.Tensor:
+    def predict_step(self, batch: Batch, batch_idx) -> torch.Tensor:
         return self.graph_to_count(batch)
 
     def graph_to_count(self, batch) -> torch.Tensor:
@@ -182,7 +186,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
         emb = self.emb_model(batch)
         return emb
 
-    def train_forward(self, batch, batch_idx):
+    def train_forward(self, batch: Batch, batch_idx):
         """
         use log2(truth+1) as the truth to train the model
         """
@@ -210,7 +214,7 @@ class NeighborhoodCountingModel(pl.LightningModule):
         loss = torch.mean(torch.stack(loss_accumulate))
         return loss
 
-    def test_forward(self, batch, batch_idx):
+    def test_forward(self, batch: Batch, batch_idx):
         """
         use 2^(pred+1) as the predition to test the model
         use ReLu as the activation function to prevent the negative count
@@ -431,16 +435,17 @@ class GossipCountingModel(pl.LightningModule):
         self.kwargs = kwargs
         self.args = args
 
-    def training_step(self, batch, batch_idx):
-        return self.train_forward(batch, batch_idx)
-
-    def test_step(self, batch, batch_idx):
+    def training_step(self, batch: Batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
-        self.log("gossip_counting_test_loss", loss, batch_size=64)
+        self.log("gossip_counting_train_loss", loss, batch_size=batch.num_graphs)
 
-    def validation_step(self, batch, batch_idx):
+    def test_step(self, batch: Batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
-        self.log("gossip_counting_val_loss", loss, batch_size=64)
+        self.log("gossip_counting_test_loss", loss, batch_size=batch.num_graphs)
+
+    def validation_step(self, batch: Batch, batch_idx):
+        loss = self.train_forward(batch, batch_idx)
+        self.log("gossip_counting_val_loss", loss, batch_size=batch.num_graphs)
 
     # def configure_optimizers(self):
     #     optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
@@ -461,7 +466,7 @@ class GossipCountingModel(pl.LightningModule):
             "monitor": "gossip_counting_val_loss",
         }
 
-    def train_forward(self, batch, batch_idx):
+    def train_forward(self, batch: Batch, batch_idx):
         """
         use log2(truth+1) as the truth to train the model
         use the original value as loss
