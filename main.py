@@ -77,9 +77,9 @@ def main(
         raise ValueError("nx_queries and atlas_query_ids cannot be both None")
 
     # define pre-transform
-    zero_node_feat_transform = (
-        ZeroNodeFeat() if args_neighborhood.zero_node_feat else None
-    )
+    load_data_transform = [T.ToUndirected()]
+    if args_neighborhood.zero_node_feat:
+        load_data_transform.append(ZeroNodeFeat())
 
     # neighborhood transformation
     neighborhood_transform = ToTconvHetero() if args_neighborhood.use_tconv else None
@@ -89,7 +89,7 @@ def main(
     if train_neighborhood or train_gossip:
         train_dataset_name = args_opt.train_dataset
         train_dataset = load_data(
-            train_dataset_name, transform=zero_node_feat_transform
+            train_dataset_name, transform=load_data_transform
         )  # TODO: add valid set mask support
         train_workload = Workload(
             train_dataset,
@@ -117,7 +117,7 @@ def main(
 
     # define testing workload
     test_dataset_name = args_opt.test_dataset
-    test_dataset = load_data(test_dataset_name, transform=zero_node_feat_transform)
+    test_dataset = load_data(test_dataset_name, transform=load_data_transform)
     test_workload = Workload(
         test_dataset,
         "data/" + test_dataset_name,
