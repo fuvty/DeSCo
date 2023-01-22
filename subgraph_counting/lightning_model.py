@@ -438,6 +438,7 @@ class GossipCountingModel(pl.LightningModule):
     def training_step(self, batch: Batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
         self.log("gossip_counting_train_loss", loss, batch_size=batch.num_graphs)
+        return loss
 
     def test_step(self, batch: Batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
@@ -468,8 +469,7 @@ class GossipCountingModel(pl.LightningModule):
 
     def train_forward(self, batch: Batch, batch_idx):
         """
-        use log2(truth+1) as the truth to train the model
-        use the original value as loss
+        use the raw truth and pred count to train the model
         """
         loss_queries = []
 
@@ -478,14 +478,12 @@ class GossipCountingModel(pl.LightningModule):
             query_emb = (
                 self.query_emb[query_id, :].view(1, -1).detach().to(self.device)
             )  # with shape #query * feature_size, do not update query emb here; used by GossipConv
-            pred_counts = self.emb_model(batch, query_emb=query_emb)
 
-            # pred_counts = torch.nan_to_num(pred_counts) # set to zero if nan
-            ground_truth = torch.log2(batch.y[:, query_id] + 1).view(-1, 1)
-            # ground_truth = torch.nan_to_num(torch.log2(batch.y[:,query_id]+1).view(-1,1))
+            neigh_pred = batch.x[:, query_id].view(-1, 1)
+            gossip_pred = self.emb_model(batch, query_emb=query_emb)
+            ground_truth = batch.y[:, query_id].view(-1, 1)
 
-            pred_counts = pred_counts + ground_truth
-            loss = self.criterion(pred_counts, ground_truth)  # pred diff
+            loss = self.criterion(gossip_pred + neigh_pred, ground_truth)  # pred diff
             loss_queries.append(loss)
 
             # print(pred_counts.view(-1),torch.log2(batch.y[:,query_id]+1).view(-1),loss)
@@ -503,12 +501,11 @@ class GossipCountingModel(pl.LightningModule):
             query_emb = (
                 self.query_emb[query_id, :].view(1, -1).detach().to(self.device)
             )  # with shape #query * feature_size, do not update query emb here; used by GossipConv
-            pred_counts = self.emb_model(batch, query_emb=query_emb)
 
-            pred_counts = pred_counts + torch.log2(batch.y[:, query_id] + 1).view(-1, 1)
-            pred_counts = 2 ** (pred_counts - 1)
+            neigh_pred = batch.x[:, query_id].view(-1, 1)
+            gossip_pred = self.emb_model(batch, query_emb=query_emb)
 
-            pred_results.append(pred_counts)
+            pred_results.append(neigh_pred + gossip_pred)
 
         pred_results = torch.cat(pred_results, dim=-1)  # shape (#nodes, #queries)
         return pred_results
