@@ -1,13 +1,12 @@
 import os
 import sys
 
-parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-sys.path.append(parentdir)
-
 import pickle
 import networkx as nx
 import pandas as pd
 import numpy as np
+from pandas import DataFrame
+from numpy import ndarray
 
 from subgraph_counting.config import parse_gossip, parse_neighborhood, parse_optimizer
 from subgraph_counting.data import gen_query_ids, load_data
@@ -19,11 +18,66 @@ from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
 from subgraph_counting.utils import add_node_feat_to_networkx
 from subgraph_counting.workload import Workload
 
-if __name__ == "__main__":
-    graphlet_path = (
-        "results/raw_results/neighborhood_SAGE_MUTAG_test_20221116_00:40:19.csv"
-    )
 
+def norm_mse(pred: ndarray, truth: ndarray, groupby: list[list] = None) -> list[float]:
+    """
+    Compute the normalized MSE for each group of queries.
+    Args:
+        pred: the predicted counts of queries, shape (num_graphs, num_queries)
+        truth: the groundtruth counts of queries, shape (num_graphs, num_queries)
+        groupby: a list of lists, each list contains the indices of queries in the same group. If None, all queries are in the same group.
+    """
+    if groupby is None:
+        groupby = [list(range(pred.shape[1]))]
+
+    norm_mse_list = []
+    for group in groupby:
+        mse = np.mean(((pred[:, group] - truth[:, group]) ** 2))
+        norm = np.var(truth[:, group])
+        norm_mse = mse / norm
+        print("mean_norm_mse: ", norm_mse)
+        norm_mse_list.append(norm_mse)
+
+    return norm_mse_list
+
+
+def mae(pred: ndarray, truth: ndarray, groupby: list[list]) -> list[float]:
+    """
+    Compute the normalized MSE for each group of queries.
+    Args:
+        pred: the predicted counts of queries, shape (num_graphs, num_queries)
+        truth: the groundtruth counts of queries, shape (num_graphs, num_queries)
+        groupby: a list of lists, each list contains the indices of queries in the same group
+    """
+    mae_list = []
+
+    for group in groupby:
+        mae = np.mean(np.abs(pred[:, group] - truth[:, group]))
+        print("mean_mae: ", mae)
+        mae_list.append(mae)
+
+    return mae_list
+
+
+def graphlet_counting_analysis(
+    dataset_name: str,
+    data_path: str,
+    raw_output_path: str,
+    groupby: list[list],
+    save_to_file: bool = False,
+):
+    """
+    Args:
+        dataset_name: the name of the dataset
+        data_path: the path of the dataset
+        raw_output_path: the path of the raw output of graphlet counting
+        groupby: a list of lists, each list contains the indices of queries in the same group
+        save_to_file: whether to save the results to file
+    """
+    raise NotImplementedError
+
+
+if __name__ == "__main__":
     # read csv
     count_pred = pd.read_csv(graphlet_path, index_col=0).to_numpy()
 
@@ -75,7 +129,7 @@ if __name__ == "__main__":
 
     # result analysis
     rmse = np.sqrt(np.mean((count_pred - count_truth) ** 2))
-    mse = np.mean((count_pred - count_truth) ** 2)
+
     mae = np.mean(np.abs(count_pred - count_truth))
 
     print("MSE: ", mse)

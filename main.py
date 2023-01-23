@@ -27,6 +27,7 @@ from subgraph_counting.lightning_model import (
 from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
 from subgraph_counting.workload import Workload
 from subgraph_counting.utils import add_node_feat_to_networkx
+from subgraph_counting.analysis import norm_mse, mae
 
 
 def main(
@@ -48,9 +49,9 @@ def main(
 
     # define queries by atlas ids or networkx graphs
     if nx_queries is None and atlas_query_ids is not None:
+        nx_queries = [nx.graph_atlas(i) for i in atlas_query_ids]
         if args_neighborhood.use_node_feature:
             # TODO: remove this in future implementations
-            nx_queries = [nx.graph_atlas(i) for i in atlas_query_ids]
             nx_queries_with_node_feat = []
             for query in nx_queries:
                 nx_queries_with_node_feat.extend(
@@ -260,7 +261,7 @@ def main(
     elif test_gossip:
         gossip_trainer.test(gossip_model, dataloaders=gossip_test_dataloader)
 
-    ########### output graphlet results ###########
+    ########### output prediction results ###########
     # configurations
     file_name = "config_{}.txt".format(args_opt.test_dataset)
     with open(os.path.join(output_dir, file_name), "w") as f:
@@ -326,6 +327,55 @@ def main(
     file_name = "test_nxgraph_{}.pk".format(args_opt.test_dataset)
     with open(os.path.join(output_dir, file_name), "wb") as f:
         pickle.dump(test_workload.to_networkx(), f)
+
+    ########### analyze the output data ###########
+    # group the results by query graph size
+    query_size_dict = {i: len(g) for i, g in enumerate(nx_queries)}
+    size_order_dict = {
+        size: i for i, size in enumerate(sorted(set(query_size_dict.values())))
+    }
+    groupby_list = [[] for _ in range(len(size_order_dict))]
+    for i in query_size_dict.keys():
+        groupby_list[size_order_dict[query_size_dict[i]]].append(i)
+
+    # analyze the graphlet count for neighborhood counting
+    truth_graphlet = test_workload.gossip_dataset.aggregate_neighborhood_count(
+        test_workload.canonical_count_truth
+    ).numpy()  # shape (num_graphs, num_queries)
+    pred_graphlet_neighborhood = (
+        torch.round(F.relu(graphlet_neighborhood_count_test)).detach().cpu().numpy()
+    )
+    norm_mse_neighborhood = norm_mse(
+        pred=pred_graphlet_neighborhood, truth=truth_graphlet, groupby=groupby_list
+    )
+    mae_neighborhood = mae(
+        pred=pred_graphlet_neighborhood, truth=truth_graphlet, groupby=groupby_list
+    )
+    print("graphlet_norm_mse_neighborhood: {}".format(norm_mse_neighborhood))
+    print("graphlet_mae_neighborhood: {}".format(mae_neighborhood))
+
+    # analyze the graphlet count for gossip counting
+    if not skip_gossip:
+        pred_graphlet_gossip = (
+            torch.round(F.relu(graphlet_gossip_count_test)).detach().cpu().numpy()
+        )
+        norm_mse_gossip = norm_mse(
+            pred=pred_graphlet_gossip, truth=truth_graphlet, groupby=groupby_list
+        )
+        mae_gossip = mae(
+            pred=pred_graphlet_gossip, truth=truth_graphlet, groupby=groupby_list
+        )
+        print("graphlet_norm_mse_gossip: {}".format(norm_mse_gossip))
+        print("graphlet_mae_gossip: {}".format(mae_gossip))
+
+    # save the results
+    file_name = "analyze_results_{}.txt".format(args_opt.test_dataset)
+    with open(os.path.join(output_dir, file_name), "w") as f:
+        f.write("graphlet_norm_mse_neighborhood: {}\n".format(norm_mse_neighborhood))
+        f.write("graphlet_mae_neighborhood: {}\n".format(mae_neighborhood))
+        if not skip_gossip:
+            f.write("graphlet_norm_mse_gossip: {}\n".format(norm_mse_gossip))
+            f.write("graphlet_mae_gossip: {}\n".format(mae_gossip))
 
     print("done")
 
