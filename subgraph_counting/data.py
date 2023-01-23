@@ -107,12 +107,18 @@ def load_data(
     save_dir = "data/" + dataset_name
 
     # find if the index of the nodes in dataset is sorted by degree
-    if "_relabelByDegree" in dataset_name:
+    if "_decreaseByDegree" in dataset_name:
         if transform is not None:
             transform.append(Relabel(mode="decreasing_degree"))
         else:
             transform = [Relabel(mode="decreasing_degree")]
-        dataset_name = dataset_name.replace("_relabelByDegree", "")
+        dataset_name = dataset_name.replace("_decreaseByDegree", "")
+    elif "_increaseByDegree" in dataset_name:
+        if transform is not None:
+            transform.append(Relabel(mode="increasing_degree"))
+        else:
+            transform = [Relabel(mode="increasing_degree")]
+        dataset_name = dataset_name.replace("_increaseByDegree", "")
 
     # combine transform
     if transform is not None:
