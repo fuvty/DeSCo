@@ -512,7 +512,8 @@ class GossipCountingModel(pl.LightningModule):
 
     def criterion(self, count, truth):
         # regression
-        loss = F.smooth_l1_loss(count, truth)
+        # loss = F.smooth_l1_loss(count, truth)
+        loss = torch.log2(torch.abs(count - truth) + 1)
         # loss = torch.clip(loss, -0.5, 0.5)
         return loss
 
