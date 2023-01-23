@@ -77,12 +77,17 @@ class NeighborhoodCountingModel(pl.LightningModule):
         """
         super(NeighborhoodCountingModel, self).__init__()
 
-        self.emb_with_query = False
-        self.kwargs = kwargs
-        self.args = args
+        self.emb_with_query = False  # noqa
         self.query_loader = None
         self.hidden_dim = hidden_dim
         self.input_dim = input_dim
+
+        self.kwargs = kwargs
+        self.args = args
+
+        # set every hyperparameters from args
+        for k, v in vars(args).items():
+            setattr(self, k, v)
 
         self.save_hyperparameters()
 
@@ -115,12 +120,12 @@ class NeighborhoodCountingModel(pl.LightningModule):
         self.log("neighborhood_counting_val_loss", loss, batch_size=batch.num_graphs)
 
     # def configure_optimizers(self):
-    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
+    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
     #     return optimizer
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
-            self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay
+            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
         # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -254,10 +259,10 @@ class NeighborhoodCountingModel(pl.LightningModule):
             query_ids, queries, transform=transform, node_feat_len=self.input_dim
         )
         min_len_neighbor = max(nx.diameter(query) for query in queries_nx)
-        if self.args.depth < min_len_neighbor:
+        if self.depth < min_len_neighbor:
             warnings.warn(
                 "neighborhood diameter {:d} is too small for the queries, the minimum is {:d}".format(
-                    self.args.depth, min_len_neighbor
+                    self.depth, min_len_neighbor
                 )
             )
         self.query_loader = DataLoader(queries_pyg, batch_size=64)
@@ -427,13 +432,16 @@ class GossipCountingModel(pl.LightningModule):
 
         kwargs["baseline"] = "gossip"  # return all emb when forwarding
 
+        # set every hyperparameters from args
+        for k, v in vars(args).items():
+            setattr(self, k, v)
+
         self.save_hyperparameters()
 
         self.emb_model = BaseGNN(
             input_dim, hidden_dim, 1, args, **kwargs
         )  # output count
         self.kwargs = kwargs
-        self.args = args
 
     def training_step(self, batch: Batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
@@ -449,12 +457,12 @@ class GossipCountingModel(pl.LightningModule):
         self.log("gossip_counting_val_loss", loss, batch_size=batch.num_graphs)
 
     # def configure_optimizers(self):
-    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
+    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
     #     return optimizer
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
-            self.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay
+            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
         # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
