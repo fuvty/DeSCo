@@ -30,6 +30,7 @@ from torch_geometric.datasets import Entities, Planetoid, TUDataset
 from tqdm import tqdm
 
 from subgraph_counting import combined_syn
+from subgraph_counting.transforms import Relabel
 
 
 def gen_query_ids(query_size: List[int]) -> List[int]:
@@ -86,7 +87,9 @@ def GenVMap(
     return maps
 
 
-def load_data(dataset_name: str, n_neighborhoods=-1, transform=None, train_split=0.6):
+def load_data(
+    dataset_name: str, n_neighborhoods=-1, transform: list = None, train_split=0.6
+):
     # make dir data if not exist
     if not os.path.exists("data"):
         os.makedirs("data")
@@ -94,44 +97,60 @@ def load_data(dataset_name: str, n_neighborhoods=-1, transform=None, train_split
     # find "train" or "test" in the dataset name
     if "train" in dataset_name:
         dataset_split = "train"
-        dataset_name = dataset_name.split("_train")[0]
+        dataset_name = dataset_name.replace("_train", "")
     elif "test" in dataset_name:
         dataset_split = "test"
-        dataset_name = dataset_name.split("_test")[0]
+        dataset_name = dataset_name.replace("_test", "")
     else:
         dataset_split = None
 
+    save_dir = "data/" + dataset_name
+
+    # find if the index of the nodes in dataset is sorted by degree
+    if "_decreaseByDegree" in dataset_name:
+        if transform is not None:
+            transform.append(Relabel(mode="decreasing_degree"))
+        else:
+            transform = [Relabel(mode="decreasing_degree")]
+        dataset_name = dataset_name.replace("_decreaseByDegree", "")
+    elif "_increaseByDegree" in dataset_name:
+        if transform is not None:
+            transform.append(Relabel(mode="increasing_degree"))
+        else:
+            transform = [Relabel(mode="increasing_degree")]
+        dataset_name = dataset_name.replace("_increaseByDegree", "")
+
+    # combine transform
+    if transform is not None:
+        transform = pyg.transforms.Compose(transform)
+
     # find dataset in the data folder
     if dataset_name == "ENZYMES":
-        dataset = TUDataset(root="data/ENZYMES", name="ENZYMES", transform=transform)
+        dataset = TUDataset(root=save_dir, name="ENZYMES", transform=transform)
     elif dataset_name == "COX2":
-        dataset = TUDataset(root="data/COX2", name="COX2", transform=transform)
+        dataset = TUDataset(root=save_dir, name="COX2", transform=transform)
     elif dataset_name == "CiteSeer":
-        dataset = Planetoid(root="data/CiteSeer", name="CiteSeer", transform=transform)
+        dataset = Planetoid(root=save_dir, name="CiteSeer", transform=transform)
     elif dataset_name == "MUTAG":
         # dataset = Entities(root="data/MUTAG", name="MUTAG", transform= transform)
-        dataset = TUDataset(root="data/MUTAG", name="MUTAG", transform=transform)
+        dataset = TUDataset(root=save_dir, name="MUTAG", transform=transform)
     elif dataset_name == "Cora":
-        dataset = Planetoid(root="data/Planetoid", name="Cora", transform=transform)
+        dataset = Planetoid(root=save_dir, name="Cora", transform=transform)
     elif dataset_name == "P2P":
-        dataset = P2P(root="data/P2P", transform=transform)
+        dataset = P2P(root=save_dir, transform=transform)
     elif dataset_name == "Astro":
-        dataset = Astro(root="data/Astro", transform=transform)
+        dataset = Astro(root=save_dir, transform=transform)
     elif dataset_name == "REDDIT-BINARY":
-        dataset = TUDataset(
-            root="data/REDDIT-BINARY", name="REDDIT-BINARY", transform=transform
-        )
+        dataset = TUDataset(root=save_dir, name="REDDIT-BINARY", transform=transform)
     elif dataset_name == "arXiv":
         dataset = PygNodePropPredDataset(
-            root="data/arXiv", name="ogbn-arxiv", transform=transform
+            root=save_dir, name="ogbn-arxiv", transform=transform
         )
     elif dataset_name == "ZINC":
         raise NotImplementedError
         # dataset = MoleculeDataset(root='data/ZINC', name='ZINC', transform= transform)
     elif dataset_name == "IMDB-BINARY":
-        dataset = TUDataset(
-            root="data/IMDB-BINARY", name="IMDB-BINARY", transform=transform
-        )
+        dataset = TUDataset(root=save_dir, name="IMDB-BINARY", transform=transform)
     elif dataset_name.split("_")[0] == "syn":
         min_size = 5
         max_size = 41
