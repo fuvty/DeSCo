@@ -62,12 +62,16 @@ from subgraph_counting.workload import NeighborhoodDataset, GossipDataset, Workl
 # # Settings
 
 # %%
-baseline_datasets = ["IMDB-BINARY", "ENZYMES", "COX2", "MUTAG"]
+# baseline_datasets = ['IMDB-BINARY', 'ENZYMES', 'COX2', 'MUTAG', 'CiteSeer', 'P2P']
+# baseline_datasets = ["ENZYMES", "ENZYMES_increaseByDegree", "ENZYMES_decreaseByDegree"]
+baseline_datasets = ["COLORS-3"]
 synthetic_dataset = "syn_4096"
 
 dataset_names = baseline_datasets + [synthetic_dataset]
 
 depth = 4
+
+output_dir = "output/figures"
 
 # %% [markdown]
 # # Load data from file
@@ -148,10 +152,9 @@ df["tsne-2d-two"] = tsne_results[:, 1]
 # t-sne
 
 # %%
-fig, axes = plt.subplots(1, 2)
-
+filename = "tsne_realWorld"
+plt.figure(figsize=(16, 10))
 sns.jointplot(
-    ax=axes[1],
     x="tsne-2d-one",
     y="tsne-2d-two",
     hue="dataset",
@@ -160,9 +163,20 @@ sns.jointplot(
     legend="full",
     alpha=0.3,
 )
+# save the figure in the output directory, if "tsne.png" already exists
+# then append a number to the filename
+i = 0
+while True:
+    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+    if not os.path.exists(full_name):
+        break
+    i += 1
+plt.savefig(full_name, bbox_inches="tight")
 
+
+filename = "tsne_coverage"
+plt.figure(figsize=(16, 10))
 sns.jointplot(
-    ax=axes[0],
     x="tsne-2d-one",
     y="tsne-2d-two",
     hue="dataset",
@@ -172,9 +186,20 @@ sns.jointplot(
     legend="full",
     alpha=0.3,
 )
+# save the figure in the output directory, if "tsne.png" already exists
+# then append a number to the filename
+i = 0
+while True:
+    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+    if not os.path.exists(full_name):
+        break
+    i += 1
+plt.savefig(full_name, bbox_inches="tight")
 
 # %%
-f, ax = plt.subplots(figsize=(16, 10))
+filename = "features"
+plt.figure(figsize=(16, 10))
+
 sns.despine(bottom=True, left=True)
 
 melt_df = pd.melt(
@@ -222,11 +247,23 @@ sns.pointplot(
     dodge=0.8 - 0.8 / len(dataset_names),
 )
 
+# save the figure in the output directory, if "tsne.png" already exists
+# then append a number to the filename
+i = 0
+while True:
+    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+    if not os.path.exists(full_name):
+        break
+    i += 1
+plt.savefig(full_name, bbox_inches="tight")
+
 # %% [markdown]
 # clustering & shortest path length
 
 # %%
+filename = "clustering-path_length"
 plt.figure(figsize=(16, 10))
+
 sns.jointplot(
     x="clustering",
     y="shortest_path_length",
@@ -237,11 +274,23 @@ sns.jointplot(
     alpha=0.3,
 )
 
+# save the figure in the output directory, if "tsne.png" already exists
+# then append a number to the filename
+i = 0
+while True:
+    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+    if not os.path.exists(full_name):
+        break
+    i += 1
+plt.savefig(full_name)
+
 # %% [markdown]
 # diameter & density
 
 # %%
+filename = "diameter-density"
 plt.figure(figsize=(16, 10))
+
 sns.jointplot(
     x="diameter",
     y="density",
@@ -252,11 +301,23 @@ sns.jointplot(
     alpha=0.3,
 )
 
+# save the figure in the output directory, if "tsne.png" already exists
+# then append a number to the filename
+i = 0
+while True:
+    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+    if not os.path.exists(full_name):
+        break
+    i += 1
+plt.savefig(full_name, bbox_inches="tight")
+
 # %% [markdown]
 # num of nodes & average degree
 
 # %%
+figurename = "node-degree"
 plt.figure(figsize=(16, 10))
+
 sns.jointplot(
     x="num_nodes",
     y="avg_degree",
@@ -266,3 +327,13 @@ sns.jointplot(
     legend="full",
     alpha=0.3,
 )
+
+# save the figure in the output directory, if "tsne.png" already exists
+# then append a number to the filename
+i = 0
+while True:
+    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+    if not os.path.exists(full_name):
+        break
+    i += 1
+plt.savefig(full_name, bbox_inches="tight")
