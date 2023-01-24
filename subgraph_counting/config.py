@@ -21,6 +21,9 @@ def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
     enc_parser.add_argument(
         "--neigh_epoch_num", type=int, help="number of training epochs"
     )
+    enc_parser.add_argument(
+        "--neigh_batch_size", type=int, help="number of training epochs"
+    )
 
     # DeSCo sepecific settings
     enc_parser.add_argument(
@@ -51,6 +54,12 @@ def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
     # optimizer settings
     enc_parser.add_argument("--neigh_weight_decay", type=float, help="weight decay")
     enc_parser.add_argument("--neigh_lr", type=float, help="learning rate")
+    enc_parser.add_argument(
+        "--neigh_tune_lr", action="store_true", help="auto tune learning rate"
+    )
+    enc_parser.add_argument(
+        "--neigh_tune_bs", action="store_true", help="auto tune batch size"
+    )
 
     enc_parser.set_defaults(
         neigh_conv_type="SAGE",
@@ -60,6 +69,7 @@ def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
         neigh_dropout=0.0,
         neigh_model_path="ckpt/kdd23/neighborhood",
         neigh_epoch_num=300,
+        neigh_batch_size=512,
         depth=4,
         use_hetero=True,
         use_tconv=True,
@@ -97,10 +107,23 @@ def parse_gossip(parser, arg_str=None) -> list[argparse._StoreAction]:
     gos_parser.add_argument(
         "--gossip_epoch_num", type=int, help="number of training epochs"
     )
+    gos_parser.add_argument(
+        "--gossip_batch_size", type=int, help="number of training epochs"
+    )
 
     # optimizer settings
-    gos_parser.add_argument("--gossip_lr", type=float, help="learning rate")
+    gos_parser.add_argument(
+        "--gossip_lr",
+        type=float,
+        help="learning rate, if None, use hyperparameter search",
+    )
     gos_parser.add_argument("--weight_decay", type=float, help="weight decay")
+    gos_parser.add_argument(
+        "--gossip_tune_lr", action="store_true", help="auto tune learning rate"
+    )
+    gos_parser.add_argument(
+        "--gossip_tune_bs", action="store_true", help="auto tune batch size"
+    )
 
     gos_parser.set_defaults(
         gossip_conv_type="GOSSIP",
@@ -109,6 +132,7 @@ def parse_gossip(parser, arg_str=None) -> list[argparse._StoreAction]:
         gossip_dropout=0.01,
         gossip_model_path="ckpt/kdd23/gossip",
         gossip_epoch_num=30,
+        gossip_batch_size=256,
         gossip_lr=1e-3,
         weight_decay=0.0,
     )
@@ -124,16 +148,10 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
         "--train_dataset", type=str, help="name of the training dataset"
     )
     opt_parser.add_argument("--test_dataset", type=str, help="name of the test dataset")
-    opt_parser.add_argument("--gpu", type=int, help="the id of gpu to use")
+    opt_parser.add_argument(
+        "--gpu", nargs="+", type=int, help="the id of gpus to use, support multi-gpu"
+    )
 
-    opt_parser.add_argument(
-        "--neighborhood_batch_size",
-        type=int,
-        help="batch size of neighborhood counting",
-    )
-    opt_parser.add_argument(
-        "--gossip_batch_size", type=int, help="batch size of gossip counting"
-    )
     opt_parser.add_argument("--num_cpu", type=int, help="number of cpu to use")
     opt_parser.add_argument("--output_dir", type=str, help="path to save raw output")
     opt_parser.add_argument(
@@ -179,9 +197,7 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
         train_dataset="syn_128",
         test_dataset="ENZYMES",
         gpu=0,
-        neighborhood_batch_size=64,
-        gossip_batch_size=64,
-        num_cpu=4,
+        num_cpu=8,
         output_dir=None,
         neigh_checkpoint=None,
         gossip_checkpoint=None,

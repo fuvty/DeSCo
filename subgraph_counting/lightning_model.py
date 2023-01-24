@@ -113,11 +113,21 @@ class NeighborhoodCountingModel(pl.LightningModule):
 
     def test_step(self, batch: Batch, batch_idx):
         loss = self.test_forward(batch, batch_idx)
-        self.log("neighborhood_counting_test_loss", loss, batch_size=batch.num_graphs)
+        self.log(
+            "neighborhood_counting_test_loss",
+            loss,
+            batch_size=batch.num_graphs,
+            sync_dist=True,
+        )
 
     def validation_step(self, batch: Batch, batch_idx):
         loss = self.train_forward(batch, batch_idx)
-        self.log("neighborhood_counting_val_loss", loss, batch_size=batch.num_graphs)
+        self.log(
+            "neighborhood_counting_val_loss",
+            loss,
+            batch_size=batch.num_graphs,
+            sync_dist=True,
+        )
 
     # def configure_optimizers(self):
     #     optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)

@@ -16,7 +16,6 @@ import torch
 import torch.nn.functional as F
 import torch_geometric as pyg
 import torch_geometric.transforms as T
-from torch_geometric.loader import DataLoader
 
 from subgraph_counting.config import parse_gossip, parse_neighborhood, parse_optimizer
 from subgraph_counting.data import gen_query_ids, load_data
@@ -24,6 +23,7 @@ from subgraph_counting.lightning_model import (
     GossipCountingModel,
     NeighborhoodCountingModel,
 )
+from subgraph_counting.lightning_data import LightningDataLoader
 from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
 from subgraph_counting.workload import Workload
 from subgraph_counting.utils import add_node_feat_to_networkx
@@ -144,28 +144,36 @@ def main(
         neighborhood_transform=neighborhood_transform,
     )  # generate pipeline dataset, including neighborhood dataset and gossip dataset
 
+    # define devices
+    devices = list(args_opt.gpu)
+    if len(devices) == 0:
+        devices = "auto"
+        device = "auto"
+    else:
+        device = devices[0]
+
     ########### begin neighborhood counting ###########
+
     # define neighborhood counting dataset
-    if train_neighborhood or train_gossip:
-        neighborhood_train_dataloader = DataLoader(
-            train_workload.neighborhood_dataset,
-            batch_size=args_opt.neighborhood_batch_size,
-            shuffle=False,
-            num_workers=args_opt.num_cpu,
-        )
-    neighborhood_test_dataloader = DataLoader(
-        test_workload.neighborhood_dataset,
-        batch_size=args_opt.neighborhood_batch_size,
-        shuffle=False,
+    neighborhood_dataloader = LightningDataLoader(
+        train_dataset=train_workload.neighborhood_dataset
+        if (train_neighborhood or train_gossip)
+        else None,
+        test_dataset=test_workload.neighborhood_dataset,
+        val_dataset=test_workload.neighborhood_dataset,  # noqa
+        batch_size=args_neighborhood.batch_size,
         num_workers=args_opt.num_cpu,
+        shuffle=False,
     )
 
     # define neighborhood counting model
     neighborhood_trainer = pl.Trainer(
         max_epochs=args_neighborhood.epoch_num,
         accelerator="gpu",
-        devices=[args_opt.gpu],
+        devices=[device],  # use only one gpu except for training
         default_root_dir=args_neighborhood.model_path,
+        auto_lr_find=args_neighborhood.tune_lr,
+        auto_scale_batch_size=args_neighborhood.tune_bs,
     )
 
     if train_neighborhood:
@@ -189,15 +197,32 @@ def main(
 
     # train neighborhood model
     if train_neighborhood:
-        neighborhood_trainer.fit(
-            model=neighborhood_model,
-            train_dataloaders=neighborhood_train_dataloader,
-            val_dataloaders=neighborhood_test_dataloader,
-        )
-
+        if args_neighborhood.tune_lr or args_neighborhood.tune_bs:
+            neighborhood_trainer.tune(
+                model=neighborhood_model, datamodule=neighborhood_dataloader
+            )
+        # multi-gpu training
+        if len(devices) > 1:
+            neighborhood_multigpu_trainer = pl.Trainer(
+                max_epochs=args_neighborhood.epoch_num,
+                accelerator="gpu",
+                devices=devices,  # use multiple gpus for training
+                default_root_dir=args_neighborhood.model_path,
+                gpus=devices,
+                strategy="ddp",
+            )
+            neighborhood_multigpu_trainer.fit(
+                model=neighborhood_model,
+                datamodule=neighborhood_dataloader,
+            )
+        else:
+            neighborhood_trainer.fit(
+                model=neighborhood_model,
+                datamodule=neighborhood_dataloader,
+            )
     # test neighborhood counting model
     neighborhood_trainer.test(
-        neighborhood_model, dataloaders=neighborhood_test_dataloader
+        model=neighborhood_model, datamodule=neighborhood_dataloader
     )
 
     ########### begin gossip counting ###########
@@ -206,7 +231,7 @@ def main(
     if train_gossip:
         neighborhood_count_train = torch.cat(
             neighborhood_trainer.predict(
-                neighborhood_model, neighborhood_train_dataloader
+                neighborhood_model, neighborhood_dataloader.train_dataloader()
             ),
             dim=0,
         )  # size = (#neighborhood, #queries)
@@ -214,13 +239,22 @@ def main(
     if test_gossip:
         neighborhood_count_test = torch.cat(
             neighborhood_trainer.predict(
-                neighborhood_model, neighborhood_test_dataloader
+                neighborhood_model, neighborhood_dataloader.test_dataloader()
             ),
             dim=0,
         )
         test_workload.apply_neighborhood_count(neighborhood_count_test)
-        # define gossip counting dataset
-        gossip_test_dataloader = DataLoader(test_workload.gossip_dataset)
+
+    # define gossip counting dataset
+    if not skip_gossip:
+        gossip_dataloader = LightningDataLoader(
+            train_dataset=train_workload.gossip_dataset if train_gossip else None,
+            test_dataset=test_workload.gossip_dataset,
+            val_dataset=test_workload.gossip_dataset,  # noqa
+            batch_size=args_gossip.batch_size,
+            num_workers=args_opt.num_cpu,
+            shuffle=False,
+        )
 
     # define gossip counting model
     input_dim = 1
@@ -241,25 +275,39 @@ def main(
 
     if not skip_gossip:
         gossip_model.set_query_emb(neighborhood_model.get_query_emb())
-
         gossip_trainer = pl.Trainer(
             max_epochs=args_gossip.epoch_num,
             accelerator="gpu",
-            devices=[args_opt.gpu],
+            devices=[device],  # use only one gpu except for training
             default_root_dir=args_gossip.model_path,
             detect_anomaly=True,
+            auto_lr_find=args_gossip.tune_lr,
+            auto_scale_batch_size="power" if args_gossip.tune_bs else None,
         )
 
     # train gossip model
     if train_gossip:
-        gossip_train_dataloader = DataLoader(train_workload.gossip_dataset)
-        gossip_trainer.fit(
-            model=gossip_model,
-            train_dataloaders=gossip_train_dataloader,
-            val_dataloaders=gossip_test_dataloader,
-        )
+        if args_gossip.tune_lr or args_gossip.tune_bs:
+            gossip_trainer.tune(gossip_model, gossip_dataloader)
+        if len(devices) > 1:
+            gossip_multigpu_trainer = pl.Trainer(
+                max_epochs=args_gossip.epoch_num,
+                accelerator="gpu",
+                devices=devices,  # use multiple gpus for training
+                default_root_dir=args_gossip.model_path,
+                strategy="ddp",
+            )
+            gossip_multigpu_trainer.fit(
+                model=gossip_model,
+                datamodule=gossip_dataloader,
+            )
+        else:
+            gossip_trainer.fit(
+                model=gossip_model,
+                datamodule=gossip_dataloader,
+            )
     elif test_gossip:
-        gossip_trainer.test(gossip_model, dataloaders=gossip_test_dataloader)
+        gossip_trainer.test(gossip_model, datamodule=gossip_dataloader)
 
     ########### output prediction results ###########
     # configurations
@@ -275,7 +323,9 @@ def main(
         f.write(str(datetime.datetime.now()))
 
     neighborhood_count_test = torch.cat(
-        neighborhood_trainer.predict(neighborhood_model, neighborhood_test_dataloader),
+        neighborhood_trainer.predict(
+            neighborhood_model, gossip_dataloader.test_dataloader()
+        ),
         dim=0,
     )
     graphlet_neighborhood_count_test = (
@@ -296,7 +346,8 @@ def main(
     if not skip_gossip:
         file_name = "gossip_graphlet_{}.csv".format(args_opt.test_dataset)
         gossip_count_test = torch.cat(
-            gossip_trainer.predict(gossip_model, gossip_test_dataloader), dim=0
+            gossip_trainer.predict(gossip_model, gossip_dataloader.test_dataloader()),
+            dim=0,
         )
         graphlet_gossip_count_test = (
             test_workload.gossip_dataset.aggregate_neighborhood_count(gossip_count_test)
