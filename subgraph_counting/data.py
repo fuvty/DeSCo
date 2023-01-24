@@ -161,6 +161,10 @@ def load_data(
             root="data/{}".format(dataset_name),
             transform=transform,
         )
+    elif dataset_name == "COLORS-3":
+        dataset = TUDataset(root=save_dir, name="COLORS-3", transform=transform)
+        num_nodes = dataset.data.num_nodes
+        dataset.data.x = torch.zeros(num_nodes, 1, dtype=torch.float)
     else:
         print(dataset_name)
         raise NotImplementedError
