@@ -2,19 +2,22 @@ import argparse
 import networkx as nx
 from subgraph_counting.workload import Workload
 from subgraph_counting.data import load_data, gen_query_ids
-from subgraph_counting.transforms import ToTconvHetero
+from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
+import torch_geometric.transforms as T
 
 if __name__ == "__main__":
     # *************** define the arguments *************** #
+    count_queries = False
 
-    train_dataset_name = "syn_4096"
+    train_dataset_name = "syn_64"
 
     args_neighborhood = argparse.Namespace()
     args_neighborhood.depth = 4
     args_neighborhood.use_node_feature = False
-    args_neighborhood.input_dim = 1
+    args_neighborhood.input_dim = -1
     args_neighborhood.use_tconv = True
     args_neighborhood.use_hetero = True
+    args_neighborhood.zero_node_feat = False
 
     num_cpu = 16
 
@@ -31,7 +34,12 @@ if __name__ == "__main__":
     print("length of nx_queries are: ", [len(q) for q in nx_queries])
     print("query_ids set to None")
 
-    train_dataset = load_data(train_dataset_name)
+    # define pre-transform
+    load_data_transform = [T.ToUndirected()]
+    if args_neighborhood.zero_node_feat:
+        load_data_transform.append(ZeroNodeFeat())
+
+    train_dataset = load_data(train_dataset_name, transform=load_data_transform)
 
     neighborhood_transform = ToTconvHetero() if args_neighborhood.use_tconv else None
     assert args_neighborhood.use_hetero if args_neighborhood.use_tconv else True
@@ -44,17 +52,20 @@ if __name__ == "__main__":
         if args_neighborhood.use_node_feature
         else -1,
     )
-    if train_workload.exist_groundtruth(query_ids=query_ids, queries=nx_queries):
-        train_workload.canonical_count_truth = train_workload.load_groundtruth(
-            query_ids=query_ids, queries=nx_queries
-        )
-    else:
-        train_workload.canonical_count_truth = train_workload.compute_groundtruth(
-            query_ids=query_ids,
-            queries=nx_queries,
-            num_workers=num_cpu,
-            save_to_file=True,
-        )
+
+    if count_queries:
+        if train_workload.exist_groundtruth(query_ids=query_ids, queries=nx_queries):
+            train_workload.canonical_count_truth = train_workload.load_groundtruth(
+                query_ids=query_ids, queries=nx_queries
+            )
+        else:
+            train_workload.canonical_count_truth = train_workload.compute_groundtruth(
+                query_ids=query_ids,
+                queries=nx_queries,
+                num_workers=num_cpu,
+                save_to_file=True,
+            )
+
     train_workload.generate_pipeline_datasets(
         depth_neigh=args_neighborhood.depth,
         neighborhood_transform=neighborhood_transform,
