@@ -169,12 +169,14 @@ def main(
     )  # generate pipeline dataset, including neighborhood dataset and gossip dataset
 
     # define devices
-    devices = list(args_opt.gpu)
-    if len(devices) == 0:
-        devices = "auto"
-        device = "auto"
+    if type(args_opt.gpu) == int:  # single gpu
+        devices = [args_opt.gpu]
+    elif type(args_opt.gpu) == list:  # multiple gpus
+        devices = args_opt.gpu
     else:
-        device = devices[0]
+        Warning("gpu is not specified, using auto mode")
+        devices = ["auto"]
+    device = devices[0]
 
     ########### begin neighborhood counting ###########
 
@@ -348,7 +350,7 @@ def main(
 
     neighborhood_count_test = torch.cat(
         neighborhood_trainer.predict(
-            neighborhood_model, gossip_dataloader.test_dataloader()
+            neighborhood_model, neighborhood_dataloader.test_dataloader()
         ),
         dim=0,
     )
