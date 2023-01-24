@@ -73,8 +73,8 @@ def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
         depth=4,
         use_hetero=True,
         use_tconv=True,
-        zero_node_feat=True,
         use_node_feature=False,
+        zero_node_feat=False,
         neigh_weight_decay=0.0,
         neigh_lr=1e-4,
     )
@@ -207,7 +207,7 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
         gossip_checkpoint=None,
         train_neigh=False,
         train_gossip=False,
-        test_gossip=True,
+        test_gossip=False,
     )
 
     # return the keys of the parser
