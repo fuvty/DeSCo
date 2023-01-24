@@ -1,9 +1,6 @@
 import os
 import sys
 
-parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-sys.path.append(parentdir)
-
 import argparse
 import datetime
 from typing import List, Optional, Tuple, Union
@@ -87,8 +84,8 @@ def main(
     neighborhood_transform = ToTconvHetero() if args_neighborhood.use_tconv else None
     assert args_neighborhood.use_hetero if args_neighborhood.use_tconv else True
 
-    # define training workload
     if train_neighborhood or train_gossip:
+        # define training workload
         train_dataset_name = args_opt.train_dataset
         train_dataset = load_data(
             train_dataset_name, transform=load_data_transform
@@ -113,6 +110,33 @@ def main(
                 save_to_file=True,
             )
         train_workload.generate_pipeline_datasets(
+            depth_neigh=args_neighborhood.depth,
+            neighborhood_transform=neighborhood_transform,
+        )  # generate pipeline dataset, including neighborhood dataset and gossip dataset
+
+        # define validation workload
+        valid_dataset_name = args_opt.valid_dataset
+        valid_dataset = load_data(valid_dataset_name, transform=load_data_transform)
+        valid_workload = Workload(
+            valid_dataset,
+            "data/" + valid_dataset_name,
+            hetero_graph=True,
+            node_feat_len=args_neighborhood.input_dim
+            if args_neighborhood.use_node_feature
+            else -1,
+        )
+        if valid_workload.exist_groundtruth(query_ids=query_ids, queries=nx_queries):
+            valid_workload.canonical_count_truth = valid_workload.load_groundtruth(
+                query_ids=query_ids, queries=nx_queries
+            )
+        else:
+            valid_workload.canonical_count_truth = valid_workload.compute_groundtruth(
+                query_ids=query_ids,
+                queries=nx_queries,
+                num_workers=args_opt.num_cpu,
+                save_to_file=True,
+            )
+        valid_workload.generate_pipeline_datasets(
             depth_neigh=args_neighborhood.depth,
             neighborhood_transform=neighborhood_transform,
         )  # generate pipeline dataset, including neighborhood dataset and gossip dataset
@@ -159,8 +183,8 @@ def main(
         train_dataset=train_workload.neighborhood_dataset
         if (train_neighborhood or train_gossip)
         else None,
+        val_dataset=valid_workload.neighborhood_dataset if train_neighborhood else None,
         test_dataset=test_workload.neighborhood_dataset,
-        val_dataset=test_workload.neighborhood_dataset,  # noqa
         batch_size=args_neighborhood.batch_size,
         num_workers=args_opt.num_cpu,
         shuffle=False,
@@ -249,8 +273,8 @@ def main(
     if not skip_gossip:
         gossip_dataloader = LightningDataLoader(
             train_dataset=train_workload.gossip_dataset if train_gossip else None,
+            val_dataset=valid_workload.gossip_dataset if train_gossip else None,
             test_dataset=test_workload.gossip_dataset,
-            val_dataset=test_workload.gossip_dataset,  # noqa
             batch_size=args_gossip.batch_size,
             num_workers=args_opt.num_cpu,
             shuffle=False,

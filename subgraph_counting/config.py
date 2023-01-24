@@ -147,6 +147,9 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
     opt_parser.add_argument(
         "--train_dataset", type=str, help="name of the training dataset"
     )
+    opt_parser.add_argument(
+        "--valid_dataset", type=str, help="name of the validation dataset"
+    )
     opt_parser.add_argument("--test_dataset", type=str, help="name of the test dataset")
     opt_parser.add_argument(
         "--gpu", nargs="+", type=int, help="the id of gpus to use, support multi-gpu"
@@ -195,6 +198,7 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
 
     opt_parser.set_defaults(
         train_dataset="syn_128",
+        valid_dataset="syn_64",
         test_dataset="ENZYMES",
         gpu=0,
         num_cpu=8,
