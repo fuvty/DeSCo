@@ -94,15 +94,34 @@ class GossipDataset(pyg.data.InMemoryDataset):
             print(
                 "Did not find attribute slices['x'] in gossip dataset. Please check if the dataset is processed correctly. If there is only one graph in the dataset, it is normal"
             )
+            # assuming single graph
+            self.slices = dict()
+            self.slices["x"] = torch.zeros(2, dtype=torch.long)
+            self.slices["x"][0] = 0
+            self.slices["x"][1] = truth.shape[0]
+            self.slices["y"] = self.slices["x"]
         self.data.y = truth
 
     def apply_neighborhood_count(self, count: torch.Tensor, neighborhood_indicator):
         num_neighborhood, num_query = count.shape
         num_node = len(neighborhood_indicator)
         self.data.x = torch.zeros(num_node, num_query)
+        # some nodes may not be in the neighborhood indicator (single-node canonical neighborhood), so we need to fill them with zeros
         self.data.x[neighborhood_indicator, :] = count.detach()
 
-        self.slices["x"] = self.slices["y"]
+        try:
+            # slice x based on y, assuming that the graph has graph level attributes
+            self.slices["x"] = self.slices["y"]  # noqa
+        except:
+            print(
+                "Did not find attribute slices['y'] in the dataset. Please check if the dataset is processed correctly. If there is only one graph in the dataset, it is normal"
+            )
+            # assuming single graph
+            self.slices = dict()
+            self.slices["x"] = torch.zeros(2, dtype=torch.long)
+            self.slices["x"][0] = 0
+            self.slices["x"][1] = num_node
+            self.slices["y"] = self.slices["x"]
 
     def aggregate_neighborhood_count(self, count: torch.Tensor) -> torch.Tensor:
         """
@@ -474,7 +493,15 @@ class Workload:
         else:
             raise ValueError("nx_queries and atlas_query_ids cannot be both None")
 
-        return os.path.exists(os.path.join(folder_path, file_name))
+        existence = os.path.exists(os.path.join(folder_path, file_name))
+
+        if not existence:
+            print(
+                "ground truth file does not exist for: ",
+                os.path.join(folder_path, file_name),
+            )
+
+        return existence
 
     def compute_groundtruth(
         self, query_ids=None, queries=None, num_workers=-1, save_to_file=True
