@@ -5,19 +5,21 @@ from subgraph_counting.data import load_data, gen_query_ids
 from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
 import torch_geometric.transforms as T
 
-if __name__ == "__main__":
+
+def main(dataset: str, depth: int):
     # *************** define the arguments *************** #
     count_queries = False
 
-    train_dataset_name = "syn_64"
+    train_dataset_name = dataset
 
     args_neighborhood = argparse.Namespace()
-    args_neighborhood.depth = 4
+
+    args_neighborhood.depth = depth
     args_neighborhood.use_node_feature = False
+    args_neighborhood.zero_node_feat = False
     args_neighborhood.input_dim = -1
     args_neighborhood.use_tconv = True
     args_neighborhood.use_hetero = True
-    args_neighborhood.zero_node_feat = False
 
     num_cpu = 16
 
@@ -28,6 +30,9 @@ if __name__ == "__main__":
     if args_neighborhood.use_node_feature:
         raise NotImplementedError
     query_ids = None
+
+    print("train_dataset_name is", train_dataset_name)
+    print(args_neighborhood)
 
     # *************** generate dataset *************** #
     print("define queries with nx graphs, number of query is", len(nx_queries))
@@ -70,3 +75,8 @@ if __name__ == "__main__":
         depth_neigh=args_neighborhood.depth,
         neighborhood_transform=neighborhood_transform,
     )  # generate pipeline dataset, including neighborhood dataset and gossip dataset
+
+
+if __name__ == "__main__":
+    for depth in range(3, 5):
+        main("P2P_decreaseByDegree", depth)
