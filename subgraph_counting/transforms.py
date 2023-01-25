@@ -1,6 +1,6 @@
 from collections import defaultdict
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
-
+from itertools import chain
 import networkx as nx
 import torch
 import torch_geometric as pyg
@@ -422,8 +422,17 @@ class Relabel(pyg.transforms.BaseTransform):
     def __call__(self, data: Data):
         mode = self.mode.replace("_", " ")
 
-        graph_nx = pyg.utils.to_networkx(data, node_attrs=["x"], to_undirected=False)
-        return from_networkx_reorder(graph_nx, group_node_attrs=["x"], mode=mode)
+        # TODO: data.node_attrs() not available for GlobalStorage for now
+        # if data.is_node_attr('x'):
+        node_attrs = None
+        if hasattr(data, "x"):
+            if data.x is not None:
+                node_attrs = ["x"]
+
+        graph_nx = pyg.utils.to_networkx(
+            data, node_attrs=node_attrs, to_undirected=False
+        )
+        return from_networkx_reorder(graph_nx, group_node_attrs=node_attrs, mode=mode)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.mode})"
