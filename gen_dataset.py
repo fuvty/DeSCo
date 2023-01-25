@@ -78,5 +78,11 @@ def main(dataset: str, depth: int):
 
 
 if __name__ == "__main__":
-    for depth in range(3, 5):
-        main("P2P_decreaseByDegree", depth)
+    datasets = ["IMDB-BINARY", "ENZYMES", "COX2", "MUTAG", "CiteSeer", "Cora", "P2P"]
+    depths = [3, 4]
+    indexes = ["", "_decreaseByDegree"]
+
+    for dataset in datasets:
+        for depth in depths:
+            for index in indexes:
+                main(dataset + index, depth)
