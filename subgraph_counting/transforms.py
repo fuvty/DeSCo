@@ -18,14 +18,24 @@ class ZeroNodeFeat(BaseTransform):
     set the node feature to zero
     """
 
-    def __init__(self, node_feat_name: str = "x"):
+    def __init__(self, node_feat_name: str = "x", node_feat_len: int = None):
         self.node_feat_name = node_feat_name
+        self.node_feat_len = node_feat_len
 
-    def __call__(self, data: Data):
-        # assert type(data) == Union[Data, Batch]
+    def __call__(self, data: Union[Data, HeteroData]):
+        if self.node_feat_len is None:
+            # if not specified
+            if hasattr(data, self.node_feat_name):
+                # set the node feat len equals to the original feat len
+                x = getattr(data, self.node_feat_name)
+                self.node_feat_len = x.shape[1]
+            else:
+                # set the node feat len to 1 if cannot infer
+                self.node_feat_len = 1
 
-        x = getattr(data, self.node_feat_name)
-        setattr(data, self.node_feat_name, torch.zeros_like(x))
+        setattr(
+            data, self.node_feat_name, torch.zeros(data.num_nodes, self.node_feat_len)
+        )
 
         return data
 
