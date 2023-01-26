@@ -488,12 +488,14 @@ class SyntheticGraphGenerator:
         edge_num_sampler: Callable,
         connected: bool = True,
         post_process: Optional[Callable] = None,
+        use_loggers: bool = False,
     ):
 
         self.node_num_sampler = node_num_sampler
         self.edge_num_sampler = edge_num_sampler
         self.connected = connected
         self.post_process = post_process
+        self.use_loggers = use_loggers
 
         # normalize the probabilities
         self.generator_probs: np.ndarray = np.array(generator_probs) / np.sum(
@@ -520,7 +522,9 @@ class SyntheticGraphGenerator:
                 raise ValueError(f"unknown generator name {name}")
             self.generator_names.append(name)
 
-        self.logger = {"node_num": [], "edge_num": [], "generator_name": []}
+        # loggers
+        if use_loggers:
+            self.logger = {"node_num": [], "edge_num": [], "generator_name": []}
 
     def generate_dataset(self, num_graphs: int) -> list[nx.Graph]:
         """
@@ -551,9 +555,10 @@ class SyntheticGraphGenerator:
             graph = self.post_process(graph)
 
         # log the graph
-        self.logger["node_num"].append(node_num)
-        self.logger["edge_num"].append(edge_num)
-        self.logger["generator_name"].append(name)
+        if self.use_loggers:
+            self.logger["node_num"].append(node_num)
+            self.logger["edge_num"].append(edge_num)
+            self.logger["generator_name"].append(name)
 
         return graph
 
@@ -571,7 +576,16 @@ class SyntheticGraphGenerator:
         return generator, name
 
 
-def gen_Synthetic(num_graph: int) -> tuple[list[Graph], dict]:
+def gen_Synthetic(
+    num_graph: int, min_size: int, max_size: int
+) -> tuple[list[Graph], dict]:
+    graphs, _ = _gen_Synthetic(num_graph, min_size, max_size)
+    return graphs
+
+
+def _gen_Synthetic(
+    num_graph: int, min_size: int, max_size: int
+) -> tuple[list[Graph], dict]:
     """
     generate a combined synthetic graph
     """
@@ -593,20 +607,19 @@ def gen_Synthetic(num_graph: int) -> tuple[list[Graph], dict]:
         0.1,
     ]
 
-    max_node_num = 1000
     node_num_sampler = lambda: np.random.randint(
-        10, max_node_num
+        min_size, max_size
     )  # uniform distribution for the number of nodes
-    avg_degree_sampler = lambda n: np.random.uniform(
-        1, 5
-    )  # uniform distribution for the average degree
+
+    def avg_degree_sampler(node_num: int):
+        return np.random.uniform(1, 5)
 
     def edge_num_sampler(node_num: int):
         avg_degree = avg_degree_sampler(node_num)
         avg_edge_num = int(node_num * avg_degree)
         # edge_num = int(np.random.f(50, 50) * avg_edge_num) # TODO: when the node number is large, make the variance smaller
         edge_num = int(
-            np.random.normal(1, 0.25 - 1.25e-4 * node_num) * avg_edge_num
+            np.random.normal(1, 0.25 - 0.125 / max_size * node_num) * avg_edge_num
         )  # when the node number is large, make the variance smaller
 
         # make sure the edge number is not too large nor too small for a connected graph
@@ -624,6 +637,7 @@ def gen_Synthetic(num_graph: int) -> tuple[list[Graph], dict]:
         post_process=lambda g: nx.convert_node_labels_to_integers(
             g, first_label=0, ordering="increasing degree"
         ),
+        use_loggers=True,
     )
 
     graphs = generator.generate_dataset(num_graph)
@@ -741,11 +755,11 @@ def draw_graphs(df):
 
 
 if __name__ == "__main__":
-    dataset, statistics = gen_Synthetic(10000)
+    dataset, statistics = _gen_Synthetic(100, 10, 100)
 
     df = pd.DataFrame(statistics)
     df["nx_graph"] = dataset
 
     print(df)
 
-    # draw_graphs(df)
+    draw_graphs(df)

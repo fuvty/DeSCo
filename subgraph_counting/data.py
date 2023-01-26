@@ -30,6 +30,7 @@ from torch_geometric.datasets import Entities, Planetoid, TUDataset
 from tqdm import tqdm
 
 from subgraph_counting import combined_syn
+from subgraph_counting.syn_data import gen_Synthetic
 from subgraph_counting.transforms import Relabel
 
 
@@ -152,9 +153,22 @@ def load_data(
     elif dataset_name == "IMDB-BINARY":
         dataset = TUDataset(root=save_dir, name="IMDB-BINARY", transform=transform)
     elif dataset_name.split("_")[0] == "syn":
+        Warning(
+            "this synthetic dataset will be deprecated soon. Use keyword Syn instead"
+        )
         min_size = 5
         max_size = 41
         dataset = SyntheticDataset(
+            min_size=min_size,
+            max_size=max_size,
+            graph_num=int(dataset_name.split("_")[1]),
+            root="data/{}".format(dataset_name),
+            transform=transform,
+        )
+    elif dataset_name.split("_")[0] == "Syn":
+        min_size = 10
+        max_size = 500
+        dataset = DeSCoSyntheticDataset(
             min_size=min_size,
             max_size=max_size,
             graph_num=int(dataset_name.split("_")[1]),
@@ -571,6 +585,142 @@ class SyntheticDataset(InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
 
 
+class DeSCoSyntheticDataset(InMemoryDataset):
+    """
+    dataset generated with mixed generators
+    """
+
+    def __init__(
+        self,
+        min_size: int = 5,
+        max_size: int = 128,
+        graph_num: int = 64,
+        root: Optional[str] = None,
+        transform: Optional[Callable] = None,
+        pre_transform: Optional[Callable] = None,
+        pre_filter: Optional[Callable] = None,
+    ):
+        self.max_size = max_size
+        self.min_size = min_size
+        self.graph_num = graph_num
+
+        self.name = "Synthetic_size_min_{:d}_max_{:d}_graph_num_{:d}".format(
+            self.min_size, self.max_size, self.graph_num
+        )
+
+        # save as InMemoryDataset
+        super().__init__(root, transform, pre_transform, pre_filter)
+        self.data, self.slices = torch.load(self.processed_paths[0])
+
+    @property
+    def raw_file_names(self) -> Union[str, List[str], Tuple]:
+        """
+        A list of files in the raw_dir which needs to be found in order to skip the download.
+        """
+        edgelist_file_name = "{}_edgelist.txt".format(self.name)
+        graph_indicator_file_name = "{}_graph_indicator.txt".format(self.name)
+        return [
+            edgelist_file_name,
+            graph_indicator_file_name,
+        ]  # can be used by calling self.raw_paths
+
+    @property
+    def processed_file_names(self) -> Union[str, List[str], Tuple]:
+        """
+        A list of files in the processed_dir which needs to be found in order to skip the processing.
+        """
+        return [
+            "{}_data.pt".format(self.name)
+        ]  # can be used by calling self.processed_paths
+
+    def download(self):
+        """
+        Generate raw data and save to disk.
+        """
+        # generate networkx synthetic graphs
+        dataset = gen_Synthetic(self.graph_num, self.min_size, self.max_size)
+
+        # shuffle dataset
+        random.shuffle(dataset)
+
+        # merge all networkx graphs into one large graph
+        init_node = 0
+        for i in range(len(dataset)):
+            dataset[i] = nx.convert_node_labels_to_integers(
+                dataset[i], ordering="sorted", first_label=init_node
+            )
+            init_node += len(dataset[i])
+
+        # save edgelist
+        edgelist_file_name = "{}_edgelist.txt".format(self.name)
+        edgelist_file_path = os.path.join(self.raw_dir, edgelist_file_name)
+        with open(edgelist_file_path, "w") as f:
+            f.write(
+                "# {:d} {:d}\n".format(
+                    sum([len(g.nodes) for g in dataset]),
+                    sum([len(g.edges) for g in dataset]),
+                )
+            )
+            for i in range(len(dataset)):
+                for edge in dataset[i].edges:
+                    f.write("{} {}\n".format(edge[0], edge[1]))
+
+        # save graph indicator
+        graph_indicator_file_name = "{}_graph_indicator.txt".format(self.name)
+        graph_indicator_file_path = os.path.join(
+            self.raw_dir, graph_indicator_file_name
+        )
+        with open(graph_indicator_file_path, "w") as f:
+            f.write("# {:d}\n".format(len(dataset)))
+            for i in range(len(dataset)):
+                f.write("{:d}\n".format(len(dataset[i].edges)))
+
+    def process(self):
+        # read graph indicator
+        graph_indicator_edge_num = []
+        with open(self.raw_paths[1], "rt") as f:
+            for line in f:
+                if not line.startswith("#"):
+                    graph_indicator_edge_num.append(int(line.strip("\n")))
+
+        dataset_nx = [
+            nx.Graph(directed=False) for _ in range(len(graph_indicator_edge_num))
+        ]
+
+        # read edgelist
+        gid = 0
+        eid = 0
+        edge_list = []
+        with open(self.raw_paths[0], "rt") as f:
+            for line in f:
+                if not line.startswith("#"):
+                    splitted = line.strip("\n").split()
+                    from_node = int(splitted[0])
+                    to_node = int(splitted[1])
+                    edge_list.append((from_node, to_node))
+                    eid += 1
+                    if eid == graph_indicator_edge_num[gid]:
+                        dataset_nx[gid].add_edges_from(edge_list)
+                        edge_list = []
+                        gid += 1
+                        eid = 0
+
+        data_list = [pyg.utils.from_networkx(nx_graph) for nx_graph in dataset_nx]
+
+        # init data_list with empty x
+        for i in range(len(data_list)):
+            data_list[i].x = torch.zeros(data_list[i].num_nodes, 1)
+
+        if self.pre_filter is not None:
+            data_list = [data for data in data_list if self.pre_filter(data)]
+
+        if self.pre_transform is not None:
+            data_list = [self.pre_transform(data) for data in data_list]
+
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])
+
+
 class P2P(InMemoryDataset):
     """
     dataset from http://snap.stanford.edu/data/p2p-Gnutella04.txt.gz
@@ -625,7 +775,11 @@ class P2P(InMemoryDataset):
         nx_graph = nx.Graph(directed=False)
         nx_graph.add_edges_from(edge_list)
 
-        data_list = [pyg.utils.from_networkx(nx_graph)]
+        # init x with zero
+        for node in nx_graph.nodes:
+            nx_graph.nodes[node]["x"] = torch.zeros(1, dtype=torch.float)
+
+        data_list = [pyg.utils.from_networkx(nx_graph, group_node_attrs=["x"])]
 
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]
