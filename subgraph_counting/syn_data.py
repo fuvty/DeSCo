@@ -1,6 +1,7 @@
 from networkx import Graph
 from networkx.utils import py_random_state
-
+from typing import Callable, Optional
+from tqdm import tqdm
 import networkx as nx
 import numpy as np
 import argparse
@@ -65,9 +66,20 @@ def gen_WSGraph(node: int, edge: int, connected: bool = True, p: float = 0.1) ->
     k = min(k, node - 1)
 
     if connected:
-        graph = nx.connected_watts_strogatz_graph(node, k, p)
+        try:
+            graph = nx.connected_watts_strogatz_graph(node, k, p)
+        except nx.exception.NetworkXPointlessConcept:
+            # due to implementation problem, the networkx function may raise an exception sometime
+            # graph = nx.watts_strogatz_graph(node, k, p)
+            graph = nx.gnm_random_graph(node, edge, directed=False)
+            # connect the components if the graph is not connected
+            components = [cc for cc in nx.connected_components(graph)]
+            if len(components) > 1:
+                graph = random_connect_components(graph, components)
     else:
         graph = nx.watts_strogatz_graph(node, k, p)
+
+    assert len(graph) > 0
 
     return graph
 
@@ -132,7 +144,7 @@ def gen_EBAGraph(
     # make p+q smaller than 1 by adjusting p and q
     if p + q > 1:
         # Warning("p + q > 1, adjust p and q")
-        s = p + q
+        s = p + q + DELTA
         p = p / (s)
         q = q / (s)
 
@@ -157,13 +169,20 @@ def gen_PowerGraph(
     """
     # E(e) = m * (n - m) + p * (n - m) * (m - 1)
     # m = int(edge/(node*(1 + p)))
-    m = int((node - sqrt(node**2 - 4 * edge)) / 2)
-    # p = edge/((node-m)*m)-1
-    p = (edge - (node - m) * m) / ((m - 1) * (node - m))
+    if node**2 - 4 * edge > 0:
+        m = int((node - sqrt(node**2 - 4 * edge)) / 2)
+        # p = edge/((node-m)*m)-1
+        if m > 1:
+            p = (edge - (node - m) * m) / ((m - 1) * (node - m))
+        else:
+            p = 0.0  # if m = 1, p = 0 is the only solution
 
-    while p < 0:
-        m -= 1
-        p = edge / ((node - m) * m) - 1
+        while p < 0:
+            m -= 1
+            p = edge / ((node - m) * m) - 1
+    else:
+        m = int(node / 2)
+        p = 0.0
 
     p = min(p, 1)
 
@@ -447,32 +466,200 @@ def _random_subset(seq, m, rng):
     return targets
 
 
-if __name__ == "__main__":
+class BetaDistributionSampler:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def sample(self):
+        return np.random.beta(self.a, self.b)
+
+
+class SyntheticGraphGenerator:
+    """
+    generate a combined synthetic graph
+    """
+
+    def __init__(
+        self,
+        generator_names: list[str],
+        generator_probs: list[float],
+        node_num_sampler: Callable,
+        edge_num_sampler: Callable,
+        connected: bool = True,
+        post_process: Optional[Callable] = None,
+    ):
+
+        self.node_num_sampler = node_num_sampler
+        self.edge_num_sampler = edge_num_sampler
+        self.connected = connected
+        self.post_process = post_process
+
+        # normalize the probabilities
+        self.generator_probs: np.ndarray = np.array(generator_probs) / np.sum(
+            generator_probs
+        )
+
+        # get the generator functions based on the names
+        self.generators = []
+        self.generator_names = []
+        for name in generator_names:
+            if name == "ER":
+                self.generators.append(gen_ERGraph)
+            elif name == "WS":
+                self.generators.append(lambda n, m, c: gen_WSGraph(n, m, c, 0.1))
+            elif name == "Random":
+                self.generators.append(gen_RandomGraph)
+            elif name == "BA":
+                self.generators.append(gen_BAGraph)
+            elif name == "EBA":
+                self.generators.append(lambda n, m, c: gen_EBAGraph(n, m, c, 0.1, 0.1))
+            elif name == "Power":
+                self.generators.append(gen_PowerGraph)
+            else:
+                raise ValueError(f"unknown generator name {name}")
+            self.generator_names.append(name)
+
+        self.logger = {"node_num": [], "edge_num": [], "generator_name": []}
+
+    def generate_dataset(self, num_graphs: int) -> list[nx.Graph]:
+        """
+        generate a list of graphs
+        """
+        graphs = []
+        for i in tqdm(range(num_graphs)):
+            graph = self._generate_graph()
+            graphs.append(graph)
+        return graphs
+
+    def _generate_graph(self) -> nx.Graph:
+        """
+        generate one graph
+        """
+        # sample the number of nodes and edges
+        node_num = self.node_num_sampler()
+        edge_num = self.edge_num_sampler(node_num)
+
+        # sample the generator
+        generator, name = self._sample_generator(node_num, edge_num)
+
+        # generate the graph
+        graph = generator(node_num, edge_num, self.connected)
+
+        # post process the graph
+        if self.post_process is not None:
+            graph = self.post_process(graph)
+
+        # log the graph
+        self.logger["node_num"].append(node_num)
+        self.logger["edge_num"].append(edge_num)
+        self.logger["generator_name"].append(name)
+
+        return graph
+
+    def _sample_generator(self, node_num: int, edge_num: int) -> Callable:
+        """
+        sample the generator based on the probabilities
+        """
+        # sample the generator
+        generator_idx = np.random.choice(
+            len(self.generator_probs), p=self.generator_probs
+        )
+        generator = self.generators[generator_idx]
+        name = self.generator_names[generator_idx]
+
+        return generator, name
+
+
+def gen_Synthetic(num_graph: int) -> tuple[list[Graph], dict]:
+    """
+    generate a combined synthetic graph
+    """
+    generator_names = [
+        "ER",
+        "WS",
+        "Random",
+        "BA",
+        "EBA",
+        "Power",
+    ]
+
+    generator_probs = [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+    ]
+
+    max_node_num = 1000
+    node_num_sampler = lambda: np.random.randint(
+        10, max_node_num
+    )  # uniform distribution for the number of nodes
+    avg_degree_sampler = lambda n: np.random.uniform(
+        1, 5
+    )  # uniform distribution for the average degree
+
+    def edge_num_sampler(node_num: int):
+        avg_degree = avg_degree_sampler(node_num)
+        avg_edge_num = int(node_num * avg_degree)
+        # edge_num = int(np.random.f(50, 50) * avg_edge_num) # TODO: when the node number is large, make the variance smaller
+        edge_num = int(
+            np.random.normal(1, 0.25 - 1.25e-4 * node_num) * avg_edge_num
+        )  # when the node number is large, make the variance smaller
+
+        # make sure the edge number is not too large nor too small for a connected graph
+        edge_num = min(edge_num, node_num * (node_num - 1) // 2)
+        edge_num = max(edge_num, node_num - 1)
+
+        return edge_num
+
+    generator = SyntheticGraphGenerator(
+        generator_names,
+        generator_probs,
+        node_num_sampler,
+        edge_num_sampler,
+        connected=True,
+        post_process=lambda g: nx.convert_node_labels_to_integers(
+            g, first_label=0, ordering="increasing degree"
+        ),
+    )
+
+    graphs = generator.generate_dataset(num_graph)
+
+    return graphs, generator.logger
+
+
+def test_generators():
+    """
+    deprecated
+    """
     df_dict = {"node_num": [], "edge_num": [], "generator_name": [], "nx_graph": []}
 
     avg_degree = 2.3
     num_graphs = 10
 
     generator_names = [
-        # "ER",
-        # "WS",
-        # "Random",
-        # "BA",
-        # "EBA",
+        "ER",
+        "WS",
+        "Random",
+        "BA",
+        "EBA",
         "Power",
     ]
 
     generators = [
-        # gen_ERGraph,
-        # lambda n,m,c : gen_WSGraph(n,m,c,0.1),
-        # gen_RandomGraph,
-        # gen_BAGraph,
-        # lambda n,m,c : gen_EBAGraph(n,m,c,0.1,0.1),
+        gen_ERGraph,
+        lambda n, m, c: gen_WSGraph(n, m, c, 0.1),
+        gen_RandomGraph,
+        gen_BAGraph,
+        lambda n, m, c: gen_EBAGraph(n, m, c, 0.1, 0.1),
         gen_PowerGraph,
     ]
 
     for name, generator in zip(generator_names, generators):
-        for num_node in range(10, 300):
+        for num_node in range(10, 1000):
             num_edge = int(num_node * avg_degree)
             for i in range(num_graphs):
                 g = generator(num_node, num_edge, True)
@@ -489,8 +676,12 @@ if __name__ == "__main__":
         print(df[df["generator_name"] == name].describe())
         print()
 
+    draw_graphs(df)
+
+
+def draw_graphs(df):
     ############################ draw the graph ############################
-    output_dir = "analysis/output"
+    output_dir = "analysis/output/syn"
 
     filename = "syn-node-edge-reg"
     plt.figure(figsize=(16, 10))
@@ -541,9 +732,20 @@ if __name__ == "__main__":
     # then append a number to the filename
     i = 0
     while True:
-        full_name = os.path.join(output_dir, filename + "_" + str(i))
+        full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
         if not os.path.exists(full_name):
             break
         i += 1
     plt.savefig(full_name, bbox_inches="tight", format="pdf")
     plt.savefig(full_name, bbox_inches="tight", format="png")
+
+
+if __name__ == "__main__":
+    dataset, statistics = gen_Synthetic(10000)
+
+    df = pd.DataFrame(statistics)
+    df["nx_graph"] = dataset
+
+    print(df)
+
+    # draw_graphs(df)
