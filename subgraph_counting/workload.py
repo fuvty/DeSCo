@@ -234,8 +234,9 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
                     nx_neighs.append(target_neigh)
 
         # convert to pyg graph
+        print("converting to pyg graph")
         neighs_pyg = []
-        for g in nx_neighs:
+        for g in tqdm(nx_neighs):
             if self.hetero_graph:
                 g = NetworkxToHetero(g, type_key="type", feat_key="feat")
             else:
