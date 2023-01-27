@@ -6,10 +6,8 @@ from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat
 import torch_geometric.transforms as T
 
 
-def main(dataset: str, depth: int):
+def main(dataset: str, depth: int, count_queries: bool = False):
     # *************** define the arguments *************** #
-    count_queries = False
-
     train_dataset_name = dataset
 
     args_neighborhood = argparse.Namespace()
@@ -21,7 +19,7 @@ def main(dataset: str, depth: int):
     args_neighborhood.use_tconv = True
     args_neighborhood.use_hetero = True
 
-    num_cpu = 16
+    num_cpu = 8
 
     # define the query graphs
     query_ids = gen_query_ids(query_size=[3, 4, 5])
@@ -78,11 +76,18 @@ def main(dataset: str, depth: int):
 
 
 if __name__ == "__main__":
-    datasets = ["IMDB-BINARY", "ENZYMES", "COX2", "MUTAG", "CiteSeer", "Cora", "P2P"]
-    depths = [3, 4]
-    indexes = ["", "_decreaseByDegree"]
+    count_queries = True
+    # datasets = ["IMDB-BINARY", "ENZYMES", "COX2", "MUTAG", "CiteSeer", "Cora", "P2P"]
+    # datasets = ["Syn_128"]
+    # datasets = ["FIRSTMM-DB"]
+    # datasets = ["MSRC-21"]
+    datasets = ["Syn_1827"]
+    depths = [4]
+    # indexes = ["", "_decreaseByDegree"]
+    indexes = [""]
+    # indexes = ["_decreaseByDegree"]
 
     for dataset in datasets:
         for depth in depths:
             for index in indexes:
-                main(dataset + index, depth)
+                main(dataset + index, depth, count_queries=count_queries)
