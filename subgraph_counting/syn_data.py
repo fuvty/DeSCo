@@ -526,23 +526,25 @@ class SyntheticGraphGenerator:
         if use_loggers:
             self.logger = {"node_num": [], "edge_num": [], "generator_name": []}
 
+        # store the generated graphs
+        self.graphs = []
+
     def generate_dataset(self, num_graphs: int) -> list[nx.Graph]:
         """
         generate a list of graphs
         """
-        graphs = []
         for i in tqdm(range(num_graphs)):
-            graph = self._generate_graph()
-            graphs.append(graph)
-        return graphs
+            graph = self._generate_graph(i)
+            self.graphs.append(graph)
+        return self.graphs
 
-    def _generate_graph(self) -> nx.Graph:
+    def _generate_graph(self, sid: int = 0) -> nx.Graph:
         """
         generate one graph
         """
         # sample the number of nodes and edges
-        node_num = self.node_num_sampler()
-        edge_num = self.edge_num_sampler(node_num)
+        node_num = self.node_num_sampler(sid=sid)
+        edge_num = self.edge_num_sampler(node_num, sid=sid)
 
         # sample the generator
         generator, name = self._sample_generator(node_num, edge_num)
@@ -579,7 +581,11 @@ class SyntheticGraphGenerator:
 def gen_Synthetic(
     num_graph: int, min_size: int, max_size: int
 ) -> tuple[list[Graph], dict]:
-    graphs, _ = _gen_Synthetic(num_graph, min_size, max_size)
+    if num_graph == 1827:
+        print("generating 1827 synthetic graphs with standard settings...")
+        graphs, _ = _gen_Synthetic_1827(num_graph, min_size, max_size)
+    else:
+        graphs, _ = _gen_Synthetic(num_graph, min_size, max_size)
     return graphs
 
 
@@ -618,6 +624,81 @@ def _gen_Synthetic(
         avg_degree = avg_degree_sampler(node_num)
         avg_edge_num = int(node_num * avg_degree)
         # edge_num = int(np.random.f(50, 50) * avg_edge_num) # TODO: when the node number is large, make the variance smaller
+        edge_num = int(
+            np.random.normal(1, 0.25 - 0.125 / max_size * node_num) * avg_edge_num
+        )  # when the node number is large, make the variance smaller
+
+        # make sure the edge number is not too large nor too small for a connected graph
+        edge_num = min(edge_num, node_num * (node_num - 1) // 2)
+        edge_num = max(edge_num, node_num - 1)
+
+        return edge_num
+
+    generator = SyntheticGraphGenerator(
+        generator_names,
+        generator_probs,
+        node_num_sampler,
+        edge_num_sampler,
+        connected=True,
+        post_process=lambda g: nx.convert_node_labels_to_integers(
+            g, first_label=0, ordering="increasing degree"
+        ),
+        use_loggers=True,
+    )
+
+    graphs = generator.generate_dataset(num_graph)
+
+    return graphs, generator.logger
+
+
+def _gen_Synthetic_1827(
+    num_graph: int, min_size: int, max_size: int
+) -> tuple[list[Graph], dict]:
+    """
+    generate 1827 combined synthetic graph
+    """
+    generator_names = [
+        "ER",
+        "WS",
+        "Random",
+        "BA",
+        "EBA",
+        "Power",
+    ]
+
+    generator_probs = [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+    ]
+
+    def node_num_sampler(sid: int) -> int:
+        # return np.random.randint(min_size, max_size)  # uniform distribution for the number of nodes
+
+        # first: sample 60 * 23 nodes uniformly in 10:1: 59
+        if sid < 60 * 23:
+            return sid // 23 + 10
+        else:
+            # second: sample 149 * 3 nodes uniformly in 60:5:800
+            return 5 * ((sid - 1380) // 3) + 60
+
+    def avg_degree_sampler(node_num: int, sid: int):
+        # return np.random.uniform(1, 5)
+
+        # first: sample 60 * 23 nodes uniformly in 1:0.5:12
+        if sid < 60 * 23:
+            return 0.5 * (sid % 23) + 1
+        else:
+            # second: sample 149 * 3 nodes uniformly in 1:1:3
+            return (sid - 1380) % 3 + 1
+
+    def edge_num_sampler(node_num: int, sid: int):
+        avg_degree = avg_degree_sampler(node_num, sid)
+        avg_edge_num = int(node_num * avg_degree)
+        # edge_num = int(np.random.f(50, 50) * avg_edge_num)
         edge_num = int(
             np.random.normal(1, 0.25 - 0.125 / max_size * node_num) * avg_edge_num
         )  # when the node number is large, make the variance smaller
