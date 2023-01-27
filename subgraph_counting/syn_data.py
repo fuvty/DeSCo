@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import argparse
 import pandas as pd
+import random
 
 # temp
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ import seaborn as sns
 import os
 from math import sqrt
 
-DELTA = 1e-6
+DELTA = 1e-3
 
 
 def gen_RandomTree(node: int) -> Graph:
@@ -142,11 +143,11 @@ def gen_EBAGraph(
     p = (edge - m * node) / node
 
     # make p+q smaller than 1 by adjusting p and q
-    if p + q > 1:
+    if p + q >= 1:
         # Warning("p + q > 1, adjust p and q")
-        s = p + q + DELTA
-        p = p / (s)
-        q = q / (s)
+        s = p + q
+        p = p / (s) - DELTA
+        q = q / (s) - DELTA
 
     graph = extended_barabasi_albert_graph(node, m, p, q)
 
@@ -680,27 +681,40 @@ def _gen_Synthetic_1827(
 
         # first: sample 60 * 23 nodes uniformly in 10:1: 59
         if sid < 60 * 23:
-            return sid // 23 + 10
+            node = sid // 23 + 10
         else:
             # second: sample 149 * 3 nodes uniformly in 60:5:800
-            return 5 * ((sid - 1380) // 3) + 60
+            node = 5 * ((sid - 1380) // 3) + 60
+            distortion = np.random.triangular(-5, 0, 5)
+            node = int(distortion + node)
+
+        return node
 
     def avg_degree_sampler(node_num: int, sid: int):
         # return np.random.uniform(1, 5)
 
         # first: sample 60 * 23 nodes uniformly in 1:0.5:12
         if sid < 60 * 23:
-            return 0.5 * (sid % 23) + 1
+            return 0.5 * (sid % 23) + 1 + np.random.triangular(-0.5, 0, 0.5)
         else:
             # second: sample 149 * 3 nodes uniformly in 1:1:3
-            return (sid - 1380) % 3 + 1
+            degree = 1 * (sid - 1380) % 3 + 1
+            if degree == 1:
+                degree += np.random.triangular(0, 0, 1)
+            elif degree == 2:
+                degree += np.random.triangular(-1, 0, 1)
+            elif degree == 3:
+                degree += np.random.triangular(-1, 0, 0)
+            else:
+                raise ValueError("degree should be 1, 2 or 3")
+            return degree
 
     def edge_num_sampler(node_num: int, sid: int):
         avg_degree = avg_degree_sampler(node_num, sid)
         avg_edge_num = int(node_num * avg_degree)
         # edge_num = int(np.random.f(50, 50) * avg_edge_num)
         edge_num = int(
-            np.random.normal(1, 0.25 - 0.125 / max_size * node_num) * avg_edge_num
+            np.random.normal(1, 0.1) * avg_edge_num
         )  # when the node number is large, make the variance smaller
 
         # make sure the edge number is not too large nor too small for a connected graph
@@ -709,15 +723,26 @@ def _gen_Synthetic_1827(
 
         return edge_num
 
+    def random_relabel_nodes(g: nx.Graph):
+        """
+        relabel nodes randomly
+        """
+        node_list = list(g.nodes)
+        random.shuffle(node_list)
+        mapping = {node_list[i]: i for i in range(len(node_list))}
+        g = nx.relabel_nodes(g, mapping)
+        return g
+
     generator = SyntheticGraphGenerator(
         generator_names,
         generator_probs,
         node_num_sampler,
         edge_num_sampler,
         connected=True,
-        post_process=lambda g: nx.convert_node_labels_to_integers(
-            g, first_label=0, ordering="increasing degree"
-        ),
+        # post_process=lambda g: nx.convert_node_labels_to_integers(
+        #     g, first_label=0, ordering="increasing degree"
+        # ),
+        post_process=random_relabel_nodes,
         use_loggers=True,
     )
 
@@ -796,8 +821,34 @@ def draw_graphs(df):
         if not os.path.exists(full_name):
             break
         i += 1
+    print("saving figure to", os.path.abspath(full_name))
     plt.savefig(full_name, bbox_inches="tight")
 
+    filename = "syn-node-degree-reg"
+    plt.figure(figsize=(16, 10))
+
+    df["degree"] = df["edge_num"] / df["node_num"]
+
+    sns.lmplot(
+        x="node_num",
+        y="degree",
+        hue="generator_name",
+        data=df,
+    )
+
+    # save the figure in the output directory, if "tsne.png" already exists
+    # then append a number to the filename
+    i = 0
+    while True:
+        full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+        if not os.path.exists(full_name):
+            break
+        i += 1
+    print("saving figure to", os.path.abspath(full_name))
+    plt.savefig(full_name, bbox_inches="tight")
+
+
+def analyze_graphs(df):
     ############################ analyze the graph ############################
     graphs = df["nx_graph"].values
 
@@ -836,7 +887,7 @@ def draw_graphs(df):
 
 
 if __name__ == "__main__":
-    dataset, statistics = _gen_Synthetic(100, 10, 100)
+    dataset, statistics = _gen_Synthetic_1827(1827, 10, 800)
 
     df = pd.DataFrame(statistics)
     df["nx_graph"] = dataset
@@ -844,3 +895,5 @@ if __name__ == "__main__":
     print(df)
 
     draw_graphs(df)
+
+    # analyze_graphs(df)
