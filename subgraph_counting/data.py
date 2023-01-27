@@ -141,6 +141,10 @@ def load_data(
         dataset = P2P(root=save_dir, transform=transform)
     elif dataset_name == "Astro":
         dataset = Astro(root=save_dir, transform=transform)
+    elif dataset_name == "MSRC-21":
+        dataset = TUDataset(root=save_dir, name="MSRC_21", transform=transform)
+    elif dataset_name == "FIRSTMM-DB":
+        dataset = TUDataset(root=save_dir, name="FIRSTMM_DB", transform=transform)
     elif dataset_name == "REDDIT-BINARY":
         dataset = TUDataset(root=save_dir, name="REDDIT-BINARY", transform=transform)
     elif dataset_name == "arXiv":
