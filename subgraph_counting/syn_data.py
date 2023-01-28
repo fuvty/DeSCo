@@ -594,7 +594,9 @@ def _gen_Synthetic(
     num_graph: int, min_size: int, max_size: int
 ) -> tuple[list[Graph], dict]:
     """
-    generate a combined synthetic graph
+    generate a combined synthetic graph with the following settings:
+    1. node_num: uniform distribution in [min_size, max_size]
+    2. degree: uniform distribution in [1, 4]
     """
     generator_names = [
         "ER",
@@ -614,20 +616,20 @@ def _gen_Synthetic(
         0.1,
     ]
 
-    node_num_sampler = lambda: np.random.randint(
+    node_num_sampler = lambda sid: np.random.randint(
         min_size, max_size
     )  # uniform distribution for the number of nodes
 
-    def avg_degree_sampler(node_num: int):
-        return np.random.uniform(1, 5)
+    def avg_degree_sampler(node_num: int, sid: int):
+        return np.random.uniform(1, 4)
 
-    def edge_num_sampler(node_num: int):
-        avg_degree = avg_degree_sampler(node_num)
+    def edge_num_sampler(node_num: int, sid: int):
+        avg_degree = avg_degree_sampler(node_num, sid)
         avg_edge_num = int(node_num * avg_degree)
-        # edge_num = int(np.random.f(50, 50) * avg_edge_num) # TODO: when the node number is large, make the variance smaller
+        # edge_num = int(np.random.f(50, 50) * avg_edge_num)
         edge_num = int(
-            np.random.normal(1, 0.25 - 0.125 / max_size * node_num) * avg_edge_num
-        )  # when the node number is large, make the variance smaller
+            np.random.normal(1, 0.1) * avg_edge_num
+        )  # TODO: when the node number is large, make the variance smaller
 
         # make sure the edge number is not too large nor too small for a connected graph
         edge_num = min(edge_num, node_num * (node_num - 1) // 2)
@@ -641,9 +643,10 @@ def _gen_Synthetic(
         node_num_sampler,
         edge_num_sampler,
         connected=True,
-        post_process=lambda g: nx.convert_node_labels_to_integers(
-            g, first_label=0, ordering="increasing degree"
-        ),
+        # post_process=lambda g: nx.convert_node_labels_to_integers(
+        # g, first_label=0, ordering="increasing degree"
+        # ),
+        post_process=random_relabel_nodes,
         use_loggers=True,
     )
 
@@ -656,7 +659,9 @@ def _gen_Synthetic_1827(
     num_graph: int, min_size: int, max_size: int
 ) -> tuple[list[Graph], dict]:
     """
-    generate 1827 combined synthetic graph
+    generate 1827 combined synthetic graph consists of two parts:
+    1. 1380 graphs with 10-59 nodes, average degree 1-12
+    2. 447 graphs with 60-800 nodes, average degree 1-3
     """
     generator_names = [
         "ER",
@@ -723,16 +728,6 @@ def _gen_Synthetic_1827(
 
         return edge_num
 
-    def random_relabel_nodes(g: nx.Graph):
-        """
-        relabel nodes randomly
-        """
-        node_list = list(g.nodes)
-        random.shuffle(node_list)
-        mapping = {node_list[i]: i for i in range(len(node_list))}
-        g = nx.relabel_nodes(g, mapping)
-        return g
-
     generator = SyntheticGraphGenerator(
         generator_names,
         generator_probs,
@@ -749,6 +744,17 @@ def _gen_Synthetic_1827(
     graphs = generator.generate_dataset(num_graph)
 
     return graphs, generator.logger
+
+
+def random_relabel_nodes(g: nx.Graph):
+    """
+    relabel nodes randomly
+    """
+    node_list = list(g.nodes)
+    random.shuffle(node_list)
+    mapping = {node_list[i]: i for i in range(len(node_list))}
+    g = nx.relabel_nodes(g, mapping)
+    return g
 
 
 def test_generators():

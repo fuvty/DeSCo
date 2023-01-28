@@ -76,7 +76,9 @@ def main(dataset: str, depth: int, count_queries: bool = False):
 
 
 if __name__ == "__main__":
+
     count_queries = True
+
     # datasets = ["IMDB-BINARY", "ENZYMES", "COX2", "MUTAG", "CiteSeer", "Cora", "P2P"]
     # datasets = ["Syn_128"]
     # datasets = ["FIRSTMM-DB"]
