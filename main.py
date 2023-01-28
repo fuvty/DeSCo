@@ -384,6 +384,16 @@ def main(
             os.path.join(output_dir, file_name)
         )  # save the inferenced results to csv file
 
+    # gossip gate value analysis
+    if not skip_gossip and args_gossip.conv_type == "GOSSIP":
+        file_name = "gossip_gate_{}.csv".format(args_opt.test_dataset)
+        gossip_gate_test = gossip_model._gate_value(gossip_model.query_emb).squeeze(
+            dim=-1
+        )
+        pd.DataFrame(gossip_gate_test.detach().cpu().numpy()).to_csv(
+            os.path.join(output_dir, file_name)
+        )
+
     # node level count after neighborhood counting
     file_name = "neighborhood_node_{}".format(args_opt.test_dataset)
     pd.DataFrame(neighborhood_count_test.detach().cpu().numpy()).to_csv(

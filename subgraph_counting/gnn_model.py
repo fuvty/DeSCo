@@ -341,6 +341,10 @@ class GossipConv(pyg_nn.MessagePassing):
             self.__class__.__name__, self.in_channels, self.out_channels
         )
 
+    def _gate_value(self, query_emb: torch.Tensor):
+        gate = self.lin_gate(query_emb)
+        return gate
+
 
 class SAGEConv(pyg_nn.MessagePassing):
     def __init__(self, in_channels, out_channels, aggr="add", **kwargs):

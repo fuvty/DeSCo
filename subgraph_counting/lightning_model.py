@@ -537,3 +537,14 @@ class GossipCountingModel(pl.LightningModule):
 
     def set_query_emb(self, query_emb: torch.Tensor, query_ids=None, queries=None):
         self.query_emb = query_emb.detach()
+
+    def _gate_value(self, query_emb) -> torch.Tensor:
+        """
+        get the gate for each query of each layer, return tensor with shape (#layers, #queries, 1)
+        """
+        assert self.conv_type == "GOSSIP"
+        gates = []
+        for layer in self.emb_model.gnn_core.convs:
+            gates.append(layer._gate_value(query_emb))
+        gates = torch.stack(gates, dim=0)
+        return gates
