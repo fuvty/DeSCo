@@ -9,6 +9,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 import torch
 import torch.nn.functional as F
 import torch_geometric as pyg
@@ -193,16 +194,23 @@ def main(
     )
 
     # define neighborhood counting model
+    neighborhood_checkpoint_callback = ModelCheckpoint(
+        monitor="neighborhood_counting_val_loss",
+        mode="min",
+        save_top_k=1,
+        save_last=True,
+    )
     neighborhood_trainer = pl.Trainer(
         max_epochs=args_neighborhood.epoch_num,
         accelerator="gpu",
         devices=[device],  # use only one gpu except for training
         default_root_dir=args_neighborhood.model_path,
+        callbacks=[neighborhood_checkpoint_callback],
         auto_lr_find=args_neighborhood.tune_lr,
         auto_scale_batch_size=args_neighborhood.tune_bs,
     )
 
-    if train_neighborhood:
+    if train_neighborhood and (neighborhood_checkpoint is None):
         neighborhood_model = NeighborhoodCountingModel(
             input_dim=args_neighborhood.input_dim,
             hidden_dim=args_neighborhood.hidden_dim,
@@ -214,6 +222,7 @@ def main(
         )
     else:
         assert neighborhood_checkpoint is not None
+        print("loading neighborhood model from checkpoint: ", neighborhood_checkpoint)
         neighborhood_model = NeighborhoodCountingModel.load_from_checkpoint(
             neighborhood_checkpoint
         )  # to hetero is automatically done upon loading
@@ -234,6 +243,7 @@ def main(
                 accelerator="gpu",
                 devices=devices,  # use multiple gpus for training
                 default_root_dir=args_neighborhood.model_path,
+                callbacks=[neighborhood_checkpoint_callback],
                 gpus=devices,
                 strategy="ddp",
             )
@@ -246,6 +256,19 @@ def main(
                 model=neighborhood_model,
                 datamodule=neighborhood_dataloader,
             )
+        neighborhood_best_model_path = neighborhood_checkpoint_callback.best_model_path
+        print("best neighborhood model path: ", neighborhood_best_model_path)
+        neighborhood_model = NeighborhoodCountingModel.load_from_checkpoint(
+            neighborhood_best_model_path
+        )
+        neighborhood_model = neighborhood_model.to_hetero_old(
+            tconv_target=args_neighborhood.use_tconv,
+            tconv_query=args_neighborhood.use_tconv,
+        )
+        neighborhood_model.set_queries(
+            query_ids=query_ids, queries=nx_queries, transform=neighborhood_transform
+        )
+
     # test neighborhood counting model
     neighborhood_trainer.test(
         model=neighborhood_model, datamodule=neighborhood_dataloader
@@ -285,7 +308,7 @@ def main(
     # define gossip counting model
     input_dim = 1
     args_gossip.use_hetero = False
-    if train_gossip:
+    if train_gossip and (gossip_checkpoint is None):
         gossip_model = GossipCountingModel(
             input_dim,
             args_gossip.hidden_dim,
@@ -293,20 +316,25 @@ def main(
             emb_channels=args_neighborhood.hidden_dim,
             input_pattern_emb=True,
         )
-    elif test_gossip:
+    elif test_gossip or (gossip_checkpoint is not None):
         assert gossip_checkpoint is not None
+        print("loading gossip model from checkpoint: ", gossip_checkpoint)
         gossip_model = GossipCountingModel.load_from_checkpoint(gossip_checkpoint)
     else:
         print("No gossip training or testing is specified, skip gossip counting.")
 
     if not skip_gossip:
         gossip_model.set_query_emb(neighborhood_model.get_query_emb())
+        gossip_checkpoint_callback = ModelCheckpoint(
+            monitor="gossip_counting_val_loss", mode="min", save_top_k=1, save_last=True
+        )
         gossip_trainer = pl.Trainer(
             max_epochs=args_gossip.epoch_num,
             accelerator="gpu",
             devices=[device],  # use only one gpu except for training
             default_root_dir=args_gossip.model_path,
             detect_anomaly=True,
+            callbacks=[gossip_checkpoint_callback],
             auto_lr_find=args_gossip.tune_lr,
             auto_scale_batch_size="power" if args_gossip.tune_bs else None,
         )
@@ -316,10 +344,14 @@ def main(
         if args_gossip.tune_lr or args_gossip.tune_bs:
             gossip_trainer.tune(gossip_model, gossip_dataloader)
         if len(devices) > 1:
+            raise NotImplementedError(
+                "multi-gpu training for gossip model is not recommanded."
+            )
             gossip_multigpu_trainer = pl.Trainer(
                 max_epochs=args_gossip.epoch_num,
                 accelerator="gpu",
                 devices=devices,  # use multiple gpus for training
+                callbacks=[gossip_checkpoint_callback],
                 default_root_dir=args_gossip.model_path,
                 strategy="ddp",
             )
@@ -332,6 +364,10 @@ def main(
                 model=gossip_model,
                 datamodule=gossip_dataloader,
             )
+        gossip_best_model_path = gossip_checkpoint_callback.best_model_path
+        print("best gossip model path: ", gossip_best_model_path)
+        gossip_model = GossipCountingModel.load_from_checkpoint(gossip_best_model_path)
+        gossip_model.set_query_emb(neighborhood_model.get_query_emb())
     elif test_gossip:
         gossip_trainer.test(gossip_model, datamodule=gossip_dataloader)
 
