@@ -72,6 +72,7 @@ baseline_datasets = ["IMDB-BINARY", "MSRC-21", "ENZYMES", "COX2", "MUTAG"] + [
 # baseline_datasets = ["MSRC-21", "FIRSTMM-DB"]
 # baseline_datasets = ["CiteSeer", "CiteSeer_increaseByDegree", "CiteSeer_decreaseByDegree"]
 # synthetic_dataset = 'Syn_128'
+# synthetic_dataset = 'Syn_1827'
 synthetic_dataset = "Syn_1827"
 
 depth = 4
@@ -146,11 +147,13 @@ for depth in depths:
 
 df = pd.DataFrame(dataframe_dict)
 
+df["dataset_class"] = df["dataset"] + "_" + df["depth"].astype(str)
+df["avg_degree"] = df["num_edges"] / df["num_nodes"]
+
+
 # %%
 filename = "node-edge"
 plt.figure(figsize=(16, 10))
-
-df["dataset_class"] = df["dataset_name"] + "_" + df["depth"].astype(str)
 
 sns.jointplot(
     x="num_nodes",
@@ -171,26 +174,17 @@ while True:
 plt.savefig(full_name, bbox_inches="tight")
 
 # %%
-df["avg_degree"] = df["num_edges"] / df["num_nodes"]
-for dataset_class_name in df["dataset_class"].unique():
-    print(dataset_class_name)
-    print(
-        df[df["dataset_class"] == dataset_class_name].describe(
-            percentiles=[0.5, 0.8, 0.9, 0.95, 0.99]
-        )
-    )
-
-# %%
-filename = "node-edge-comprehensive"
+filename = "degree-distri"
 plt.figure(figsize=(16, 10))
 
 df["dataset_class"] = df["dataset"] + "_" + df["depth"].astype(str)
+df["avg_degree"] = df["num_edges"] / df["num_nodes"]
 
-sns.pairplot(
-    # x="num_nodes", y="num_edges",
-    hue="dataset_class",
-    data=df,
-    # alpha=0.3,
+p = sns.jointplot(
+    x="num_nodes",
+    y="avg_degree",
+    hue="dataset",
+    data=df[df["dataset"] != synthetic_dataset],
 )
 
 # save the figure in the output directory, if "tsne.png" already exists
@@ -202,6 +196,59 @@ while True:
         break
     i += 1
 plt.savefig(full_name, bbox_inches="tight")
+
+# %%
+filename = "degree-distri-syn"
+plt.figure(figsize=(16, 10))
+
+p = sns.jointplot(
+    x="num_nodes",
+    y="avg_degree",
+    hue="dataset",
+    data=df,
+)
+
+# save the figure in the output directory, if "tsne.png" already exists
+# then append a number to the filename
+i = 0
+while True:
+    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+    if not os.path.exists(full_name):
+        break
+    i += 1
+plt.savefig(full_name, bbox_inches="tight")
+
+# %%
+for dataset_class_name in df["dataset_class"].unique():
+    print(dataset_class_name)
+    print(
+        df[df["dataset_class"] == dataset_class_name].describe(
+            percentiles=[0.5, 0.8, 0.9, 0.95, 0.99]
+        )
+    )
+
+# %%
+filename = "degree-distribution"
+plt.figure(figsize=(16, 10))
+
+sns.displot(
+    x="avg_degree",
+    hue="dataset_class",
+    data=df,
+)
+
+# save the figure in the output directory, if "tsne.png" already exists
+# then append a number to the filename
+i = 0
+while True:
+    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
+    if not os.path.exists(full_name):
+        break
+    i += 1
+plt.savefig(full_name, bbox_inches="tight")
+
+# %% [markdown]
+# regression analysis
 
 # %%
 filename = "node-edge-reg"
@@ -227,57 +274,6 @@ while True:
         break
     i += 1
 plt.savefig(full_name, bbox_inches="tight")
-
-# %%
-filename = "node-degree-reg"
-plt.figure(figsize=(16, 10))
-
-df["dataset_class"] = df["dataset"] + "_" + df["depth"].astype(str)
-df["avg_degree"] = df["num_edges"] / df["num_nodes"]
-
-p = sns.jointplot(
-    x="num_nodes",
-    y="avg_degree",
-    hue="dataset",
-    data=df[df["dataset"] != synthetic_dataset],
-)
-
-# save the figure in the output directory, if "tsne.png" already exists
-# then append a number to the filename
-i = 0
-while True:
-    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
-    if not os.path.exists(full_name):
-        break
-    i += 1
-plt.savefig(full_name, bbox_inches="tight")
-
-# %%
-filename = "degree-distri"
-plt.figure(figsize=(16, 10))
-
-df["dataset_class"] = df["dataset"] + "_" + df["depth"].astype(str)
-df["avg_degree"] = df["num_edges"] / df["num_nodes"]
-
-p = sns.jointplot(
-    x="num_nodes",
-    y="avg_degree",
-    hue="dataset",
-    data=df,
-)
-
-# save the figure in the output directory, if "tsne.png" already exists
-# then append a number to the filename
-i = 0
-while True:
-    full_name = os.path.join(output_dir, filename + "_" + str(i) + ".png")
-    if not os.path.exists(full_name):
-        break
-    i += 1
-plt.savefig(full_name, bbox_inches="tight")
-
-# %% [markdown]
-# regression analysis
 
 # %%
 for depth in depths:
