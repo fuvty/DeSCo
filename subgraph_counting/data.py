@@ -89,7 +89,12 @@ def GenVMap(
 
 
 def load_data(
-    dataset_name: str, n_neighborhoods=-1, transform: list = None, train_split=0.6
+    dataset_name: str,
+    n_neighborhoods=-1,
+    transform: list = None,
+    train_split=0.25,
+    val_split=0.25,
+    test_split=0.5,
 ):
     # make dir data if not exist
     if not os.path.exists("data"):
@@ -99,6 +104,9 @@ def load_data(
     if "train" in dataset_name:
         dataset_split = "train"
         dataset_name = dataset_name.replace("_train", "")
+    elif "val" in dataset_name:
+        dataset_split = "val"
+        dataset_name = dataset_name.replace("_val", "")
     elif "test" in dataset_name:
         dataset_split = "test"
         dataset_name = dataset_name.replace("_test", "")
@@ -188,18 +196,27 @@ def load_data(
         raise NotImplementedError
 
     # TODO: support to define train/test/valid split
+    train_len = int(len(dataset) * train_split)
+    val_len = int(len(dataset) * val_split)
+    test_len = len(dataset) - train_len - val_len
+
     if dataset_split is None:
         return dataset
     elif dataset_split == "train":
         dataset = [g for g in dataset]
         random.seed(0)
         random.shuffle(dataset)
-        return dataset[: int(len(dataset) * train_split)]
+        return dataset[0:train_len]
+    elif dataset_split == "val":
+        dataset = [g for g in dataset]
+        random.seed(0)
+        random.shuffle(dataset)
+        return dataset[train_len : train_len + val_len]
     elif dataset_split == "test":
         dataset = [g for g in dataset]
         random.seed(0)
         random.shuffle(dataset)
-        return dataset[int(len(dataset) * train_split) :]
+        return dataset[train_len + val_len :]
     else:
         print(dataset_name, " does not confirms to the naming convention")
         raise NotImplementedError
