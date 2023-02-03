@@ -186,7 +186,9 @@ def main(
         train_dataset=train_workload.neighborhood_dataset
         if (train_neighborhood or train_gossip)
         else None,
-        val_dataset=valid_workload.neighborhood_dataset if train_neighborhood else None,
+        val_dataset=valid_workload.neighborhood_dataset
+        if (train_neighborhood or train_gossip)
+        else None,
         test_dataset=test_workload.neighborhood_dataset,
         batch_size=args_neighborhood.batch_size,
         num_workers=args_opt.num_cpu,
@@ -285,6 +287,15 @@ def main(
             dim=0,
         )  # size = (#neighborhood, #queries)
         train_workload.apply_neighborhood_count(neighborhood_count_train)
+
+        neighborhood_count_valid = torch.cat(
+            neighborhood_trainer.predict(
+                neighborhood_model, neighborhood_dataloader.val_dataloader()
+            ),
+            dim=0,
+        )  # size = (#neighborhood, #queries)
+        valid_workload.apply_neighborhood_count(neighborhood_count_valid)
+
     if test_gossip:
         neighborhood_count_test = torch.cat(
             neighborhood_trainer.predict(
