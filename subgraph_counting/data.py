@@ -26,7 +26,7 @@ from ogb.nodeproppred import PygNodePropPredDataset
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric import utils
 from torch_geometric.data import InMemoryDataset, download_url
-from torch_geometric.datasets import Entities, Planetoid, TUDataset
+from torch_geometric.datasets import Entities, Planetoid, TUDataset, ZINC
 from tqdm import tqdm
 
 from subgraph_counting import combined_syn
@@ -90,6 +90,7 @@ def GenVMap(
 
 def load_data(
     dataset_name: str,
+    root_folder="data",
     n_neighborhoods=-1,
     transform: list = None,
     train_split=0.25,
@@ -113,7 +114,7 @@ def load_data(
     else:
         dataset_split = None
 
-    save_dir = "data/" + dataset_name
+    save_dir = os.path.join(root_folder, dataset_name)
 
     # find if the index of the nodes in dataset is sorted by degree
     if "_decreaseByDegree" in dataset_name:
@@ -160,10 +161,11 @@ def load_data(
             root=save_dir, name="ogbn-arxiv", transform=transform
         )
     elif dataset_name == "ZINC":
-        raise NotImplementedError
-        # dataset = MoleculeDataset(root='data/ZINC', name='ZINC', transform= transform)
+        dataset = ZINC(root=save_dir, transform=transform)
     elif dataset_name == "IMDB-BINARY":
         dataset = TUDataset(root=save_dir, name="IMDB-BINARY", transform=transform)
+    elif dataset_name == "IMDB-MULTI":
+        dataset = TUDataset(root=save_dir, name="IMDB-MULTI", transform=transform)
     elif dataset_name.split("_")[0] == "syn":
         Warning(
             "this synthetic dataset will be deprecated soon. Use keyword Syn instead"
