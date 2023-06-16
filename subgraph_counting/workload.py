@@ -42,6 +42,7 @@ from subgraph_counting.data import (
 )
 from subgraph_counting.transforms import NetworkxToHetero, Relabel, ZeroNodeFeat
 from subgraph_counting.utils import add_node_feat_to_networkx
+from subgraph_counting.LRP_dataset import LRP_Dataset
 
 
 class GossipDataset(pyg.data.InMemoryDataset):
@@ -362,10 +363,12 @@ class Workload:
         # list[pyg.data.Data]
         self.neighborhood_dataset = None
         self.gossip_dataset = None
+        self.LRP_dataset = None
         # self.neighs_valid = []
         # list[nx.Graph], holding the feature of every node on original graph
         self.graphs_pyg = []
         # self.graphs_valid = []
+        self.neighs_pyg = []
 
         # neighs_index[k]=(gid, nid) means the k-th result of neighs_train is the nid node from gid graph
         self.neighs_index = np.array([[]])
@@ -384,6 +387,252 @@ class Workload:
             self.node_feat_len = 1
 
         self.node_feat_key = "feat"
+
+    def get_LRP_workload_name(
+        self,
+        dataset,
+        len_query_ids,
+        n_neighborhoods=6400,
+        use_norm=False,
+        objective="canonical",
+        relabel_mode=None,
+        hetero=True,
+    ):
+        if dataset == "syn":
+            name = (
+                dataset
+                + "_"
+                + "gossip_"
+                + str(n_neighborhoods)
+                + "_"
+                + "n_query_"
+                + str(len_query_ids)
+                + "_"
+                + "all"
+            )
+        else:
+            name = (
+                dataset
+                + "_"
+                + "gossip_"
+                + "n_query_"
+                + str(len_query_ids)
+                + "_"
+                + "all"
+            )
+        # if args.use_log:
+        #     name += "_log"
+        if use_norm:
+            name += "_norm"
+        if objective == "graphlet":
+            name += "_graphlet"
+        if relabel_mode is not None:
+            name += "_" + relabel_mode
+        name = name.replace("/", "_")
+
+        if hetero:
+            name = name + "_hetero"
+
+        workload_file = "subgraph_counting/workload/general/" + name
+
+        return workload_file
+
+    def get_DIAMNET_workload(self, query_ids, args, load_list=["neighs_pyg"]):
+
+        GRAPHLET = True
+        if GRAPHLET:
+            args.hetero = True
+            # load_list.append('graphs_nx') if 'graphs_nx' not in load_list else None
+            load_list = ["graphs_nx"]
+
+        if args.dataset == "syn":
+            name = (
+                args.dataset
+                + "_"
+                + "gossip_"
+                + str(args.n_neighborhoods)
+                + "_"
+                + "n_query_"
+                + str(len(query_ids))
+                + "_"
+                + "all"
+            )
+        else:
+            name = (
+                args.dataset
+                + "_"
+                + "gossip_"
+                + "n_query_"
+                + str(len(query_ids))
+                + "_"
+                + "all"
+            )
+        # if args.use_log:
+        #     name += "_log"
+        if args.use_norm:
+            name += "_norm"
+        if args.objective == "graphlet":
+            name += "_graphlet"
+        if args.relabel_mode is not None:
+            name += "_" + args.relabel_mode
+        name = name.replace("/", "_")
+
+        if args.hetero:
+            name = name + "_hetero"
+
+        workload_file = "subgraph_counting/workload/general/" + name
+        workload_file_full = (
+            "subgraph_counting/workload/general/"
+            + args.dataset
+            + "_gossip_n_query_994_all"
+            + "_hetero"
+        )
+
+        if os.path.exists(workload_file):
+            print("load ground truth from " + workload_file)
+            self.load(workload_file, load_list=load_list)
+        # elif os.path.exists(workload_file_full):
+        #     print("load ground truth from full workload "+workload_file_full)
+        #     workload = Workload(name, sample_neigh= False, hetero_graph= args.hetero)
+        #     workload.load(workload_file_full, load_list= load_list)
+        else:
+            raise Exception("workload file not found")
+            print("generate and save ground truth to " + workload_file)
+            self.gen_workload_general(query_ids, args)
+            self.save(workload_file)
+
+        num_query = len(query_ids)
+
+        if GRAPHLET:
+            args.use_hetero = False
+            print("convert to graphlet")
+            self.neighs_pyg = []
+            for nx_graph in self.graphs_nx:
+                count_dict = dict()
+                count_list = []
+                # convert networkx to pyg and init node feature with zero tensor
+                pyg_graph = pyg.utils.from_networkx(nx_graph)
+                pyg_graph.node_feature = torch.zeros(len(nx_graph), 1)
+                for key in pyg_graph.keys:
+                    if key.split("_")[0] == "count":
+                        query_id = int(key.split("_")[1])
+                        count_dict[query_id] = torch.log2(
+                            torch.sum(2 ** pyg_graph[key] - 1) + 1
+                        )
+                query_ids_cur = sorted(list(count_dict.keys()))
+                for query_id in query_ids_cur:
+                    count_list.append(count_dict[query_id])
+                pyg_graph.y = torch.stack(count_list, dim=0).view(1, -1)
+
+                self.neighs_pyg.append(pyg_graph)
+
+    def get_LRP_workload(self, query_ids, args, load_list=["neighs_pyg"]):
+
+        GRAPHLET = True
+        if GRAPHLET:
+            args.hetero = True
+            # load_list.append('graphs_nx') if 'graphs_nx' not in load_list else None
+            load_list = ["graphs_nx"]
+
+        if args.dataset == "syn":
+            name = (
+                args.dataset
+                + "_"
+                + "gossip_"
+                + str(args.n_neighborhoods)
+                + "_"
+                + "n_query_"
+                + str(len(query_ids))
+                + "_"
+                + "all"
+            )
+        else:
+            name = (
+                args.dataset
+                + "_"
+                + "gossip_"
+                + "n_query_"
+                + str(len(query_ids))
+                + "_"
+                + "all"
+            )
+        # if args.use_log:
+        #     name += "_log"
+        if args.use_norm:
+            name += "_norm"
+        if args.objective == "graphlet":
+            name += "_graphlet"
+        if args.relabel_mode is not None:
+            name += "_" + args.relabel_mode
+        name = name.replace("/", "_")
+
+        if args.hetero:
+            name = name + "_hetero"
+
+        workload_file = "subgraph_counting/workload/general/" + name
+        workload_file_full = (
+            "subgraph_counting/workload/general/"
+            + args.dataset
+            + "_gossip_n_query_994_all"
+            + "_hetero"
+        )
+
+        if os.path.exists(workload_file):
+            print("load ground truth from " + workload_file)
+            self.load(workload_file, load_list=load_list)
+        # elif os.path.exists(workload_file_full):
+        #     print("load ground truth from full workload "+workload_file_full)
+        #     workload = Workload(name, sample_neigh= False, hetero_graph= args.hetero)
+        #     workload.load(workload_file_full, load_list= load_list)
+        else:
+            raise Exception("workload file not found")
+            print("generate and save ground truth to " + workload_file)
+            self.gen_workload_general(query_ids, args)
+            self.save(workload_file)
+
+        num_query = len(query_ids)
+
+        if GRAPHLET:
+            args.use_hetero = False
+            print("convert to graphlet")
+            self.neighs_pyg = []
+            for nx_graph in self.graphs_nx:
+                count_dict = dict()
+                count_list = []
+                # convert networkx to pyg and init node feature with zero tensor
+                pyg_graph = pyg.utils.from_networkx(nx_graph)
+                pyg_graph.node_feature = torch.zeros(len(nx_graph), 1)
+                for key in pyg_graph.keys:
+                    if key.split("_")[0] == "count":
+                        query_id = int(key.split("_")[1])
+                        count_dict[query_id] = torch.log2(
+                            torch.sum(2 ** pyg_graph[key] - 1) + 1
+                        )
+                query_ids_cur = sorted(list(count_dict.keys()))
+                for query_id in query_ids_cur:
+                    count_list.append(count_dict[query_id])
+                pyg_graph.y = torch.stack(count_list, dim=0).view(1, -1)
+
+                self.neighs_pyg.append(pyg_graph)
+
+        name = self.get_LRP_workload_name(
+            args.dataset,
+            len(query_ids),
+            args.n_neighborhoods,
+            args.use_norm,
+            args.objective,
+            args.relabel_mode,
+            True,
+        )
+        self.LRP_dataset = LRP_Dataset(
+            args.dataset,
+            self.neighs_pyg,
+            labels=[g.y for g in self.neighs_pyg],
+            lrp_save_path=name,
+            lrp_depth=1,
+            subtensor_length=4,
+            lrp_width=3,
+        )
 
     def generate_pipeline_datasets(
         self,

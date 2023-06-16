@@ -1,5 +1,9 @@
+from collections import OrderedDict
 import os
 import sys
+
+from pytorch_lightning.utilities.types import STEP_OUTPUT
+from torch import Tensor
 
 parentdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(parentdir)
@@ -15,13 +19,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric as pyg
 from torch_geometric.loader import DataLoader
+import torch.utils.data as torch_data
 
 from torch_geometric.data import Batch
 
-from subgraph_counting.gnn_model import BaseGNN
-from subgraph_counting.transforms import NetworkxToHetero
+from subgraph_counting.gnn_model import BaseGNN, LRP_GraphEmbModule
+from subgraph_counting.transforms import NetworkxToHetero, to_device, get_truth
 from subgraph_counting.workload import graph_atlas_plus
 from subgraph_counting.utils import add_node_feat_to_networkx
+from subgraph_counting.LRP_dataset import (
+    LRP_Dataset,
+    collate_lrp_dgl_light_index_form_wrapper,
+)
+from subgraph_counting.DIAMNet import DIAMNet
 
 
 def gen_queries(
@@ -548,3 +558,284 @@ class GossipCountingModel(pl.LightningModule):
             gates.append(layer._gate_value(query_emb))
         gates = torch.stack(gates, dim=0)
         return gates
+
+
+class DIAMNETModel(pl.LightningModule):
+    def __init__(self, input_dim, hidden_dim, args, **kwargs):
+        super(DIAMNETModel, self).__init__()
+        self.emb_with_query = False
+
+        self.kwargs = kwargs
+        self.args = args
+
+        # set every hyperparameters from args
+        for k, v in vars(args).items():
+            setattr(self, k, v)
+
+        self.save_hyperparameters()
+
+        self.emb_model = BaseGNN(
+            input_dim, hidden_dim, hidden_dim, args, emb_channels=hidden_dim, **kwargs
+        )
+        self.emb_model_query = BaseGNN(
+            input_dim, hidden_dim, hidden_dim, args, emb_channels=hidden_dim, **kwargs
+        )
+
+        self.count_model = DIAMNet(
+            pattern_dim=hidden_dim,
+            graph_dim=hidden_dim,
+            hidden_dim=hidden_dim,
+            recurrent_steps=3,
+            num_heads=4,
+            mem_len=4,
+            mem_init="mean",
+        )
+
+    def training_step(self, batch, batch_idx):
+        loss = self.train_forward(batch, batch_idx)
+        self.log("DIAMNET_counting_train_loss", loss)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        loss = self.train_forward(batch, batch_idx)
+        self.log("DIAMNET_counting_test_loss", loss)
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.train_forward(batch, batch_idx)
+        self.log("DIAMNET_counting_val_loss", loss)
+
+    def configure_optimizers(self):
+
+        optimizer = torch.optim.Adam(
+            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+        )
+        # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=20, min_lr=1e-5
+        )  # add schedular
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": lr_scheduler,
+            "monitor": "DIAMNET_counting_val_loss",
+        }
+
+    def criterion(self, count, truth):
+
+        # regression
+        loss_regression = F.smooth_l1_loss(count, truth)
+
+        loss = loss_regression
+        # loss = loss_classification
+        return loss
+
+    def train_forward(self, batch, batch_idx):
+        batch = to_device(batch, self.device)
+        emb_queries = []
+        query_lens = []
+        for query_batch in self.query_loader:
+            emb, query_len = self.emb_model_query(query_batch)
+            emb_queries.append(emb)
+            query_lens.append(query_len)
+        emb_queries = torch.cat(emb_queries, dim=0)
+        query_lens = torch.cat(query_lens, dim=0)
+        emb_queries = [
+            (emb_queries[i], query_lens[i]) for i in range(emb_queries.shape[0])
+        ]  # List[Tuple[Tensor, Tensor]], each represent a graph
+        emb_target = self.emb_model(batch)
+
+        query_ids = self.query_ids
+        query_embs = dict()
+        for i, query_id in enumerate(query_ids):
+            query_embs[query_id] = emb_queries[i]
+        loss_queries = []
+        for i, query_id in enumerate(query_ids):
+            emb_query = (
+                query_embs[query_id][0].repeat(emb_target[0].shape[0], 1, 1),
+                query_embs[query_id][1].repeat(emb_target[1].shape[0], 1),
+            )
+            # emb = (emb_target, query_emb)
+            # emb_target, emb_query = emb
+            emb_target, target_lens = emb_target
+            emb_query, query_lens = emb_query
+            results = self.count_model(emb_query, query_lens, emb_target, target_lens)
+            truth = get_truth(batch)[:, i].view(-1, 1)
+            loss = self.criterion(results, truth)
+            loss_queries.append(loss)
+        loss = torch.mean(torch.stack(loss_queries))
+
+        return loss
+
+    def set_queries(self, query_ids: List[int], device: torch.device):
+        queries_pyg = [
+            pyg.utils.from_networkx(graph_atlas_plus(query_id)).to(device)
+            for query_id in query_ids
+        ]
+        for query_pyg in queries_pyg:
+            query_pyg.node_feature = torch.zeros(
+                (query_pyg.num_nodes, 1), device=device
+            )
+        self.query_loader = DataLoader(queries_pyg, batch_size=64)
+
+
+class LRPModel(pl.LightningModule):
+    def __init__(self, input_dim, hidden_dim, args, **kwargs):
+        super(LRPModel, self).__init__()
+
+        self.emb_with_query = False
+
+        self.kwargs = kwargs
+        self.args = args
+
+        # set every hyperparameters from args
+        for k, v in vars(args).items():
+            setattr(self, k, v)
+
+        self.save_hyperparameters()
+
+        # define embed model
+        self.emb_model = LRP_GraphEmbModule(
+            lrp_in_dim=input_dim,
+            hid_dim=hidden_dim,
+            num_layers=args.n_layers,
+            num_atom_type=input_dim,
+            lrp_length=16,
+            num_bond_type=1,
+            num_tasks=1,
+        )
+        self.emb_model_query = LRP_GraphEmbModule(
+            lrp_in_dim=input_dim,
+            hid_dim=hidden_dim,
+            num_layers=args.n_layers,
+            num_atom_type=input_dim,
+            lrp_length=16,
+            num_bond_type=1,
+            num_tasks=1,
+        )
+
+        self.count_model = nn.Sequential(
+            nn.Linear(2 * hidden_dim, 4 * hidden_dim),
+            nn.LeakyReLU(),
+            nn.Linear(4 * hidden_dim, 1),
+        )
+
+    def load_state_dict(
+        self, state_dict: OrderedDict[str, Tensor], strict: bool = True
+    ):
+        return super().load_state_dict(state_dict, strict)
+
+    def training_step(self, batch, batch_idx):
+        loss = self.train_forward(batch, batch_idx)
+        self.log("LRP_counting_train_loss", loss, batch_size=batch[0].y.shape[0])
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        loss = self.train_forward(batch, batch_idx)
+        self.log("LRP_counting_test_loss", loss, batch_size=batch[0].y.shape[0])
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.train_forward(batch, batch_idx)
+        self.log("LRP_counting_val_loss", loss, batch_size=batch[0].y.shape[0])
+
+    def configure_optimizers(self):
+
+        optimizer = torch.optim.Adam(
+            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+        )
+        # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=20, min_lr=1e-5
+        )  # add schedular
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": lr_scheduler,
+            "monitor": "LRP_counting_val_loss",
+        }
+
+    def criterion(self, count, truth):
+        # regression
+        loss_regression = F.smooth_l1_loss(count, truth)
+
+        loss = loss_regression
+        # loss = loss_classification
+        return loss
+
+    def train_forward(self, batch, batch_idx):
+
+        batch = to_device(batch, self.device)
+        emb_queries = []
+        for query_batch in self.query_loader:
+            query_batch = to_device(query_batch, self.device)
+            emb_queries.append(self.emb_model_query(query_batch))
+        emb_queries = torch.cat(emb_queries, dim=0)
+        emb_targets = self.emb_model(batch)
+
+        # iterate over #emb_queries * #emb_targets to compute the count
+        loss_accumulate = []
+        for i, query_emb in enumerate(emb_queries):
+            emb = (
+                emb_targets,
+                query_emb.expand_as(emb_targets),
+            )  # a batch of (target, query) paris with batch size the same as target
+            emb = torch.cat(emb, dim=-1)
+            results = self.count_model(emb)
+            # truth = batch.y[:, i].view(-1, 1)  # shape (batch_size,1)
+            truth = get_truth(batch)[:, i].view(-1, 1)
+
+            ######## different at train and test ########
+            loss = self.criterion(results, truth)
+            #############################################
+
+            loss_accumulate.append(loss)
+        loss = torch.mean(torch.stack(loss_accumulate))
+        return loss
+
+    def predict_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
+
+        batch = to_device(batch, self.device)
+        emb_queries = []
+        for query_batch in self.query_loader:
+            query_batch = to_device(query_batch, self.device)
+            emb_queries.append(self.emb_model_query(query_batch))
+        emb_queries = torch.cat(emb_queries, dim=0)
+        emb_targets = self.emb_model(batch)
+
+        # iterate over #emb_queries * #emb_targets to compute the count
+        pred_results = []
+        for i, query_emb in enumerate(emb_queries):
+            emb = (
+                emb_targets,
+                query_emb.expand_as(emb_targets),
+            )  # a batch of (target, query) paris with batch size the same as target
+            emb = torch.cat(emb, dim=-1)
+            results = self.count_model(emb)
+            pred_results.append(results)
+        pred_results = torch.cat(pred_results, dim=1)
+        return pred_results
+
+    def set_queries(self, query_ids: List[int], device: torch.device):
+        queries_pyg = [
+            pyg.utils.from_networkx(graph_atlas_plus(query_id)).to(device)
+            for query_id in query_ids
+        ]
+        for query_pyg in queries_pyg:
+            query_pyg.node_feature = torch.zeros(
+                (query_pyg.num_nodes, 1), device=device
+            )
+        queries_pyg = [g.to("cpu") for g in queries_pyg]
+        query_LRP = LRP_Dataset(
+            "queries_" + str(len(queries_pyg)),
+            graphs=queries_pyg,
+            labels=[torch.zeros(1) for _ in range(len(queries_pyg))],
+            lrp_save_path="/home/nfs_data/weichiyue/2021Summer/tmp_folder",
+            lrp_depth=1,
+            subtensor_length=4,
+            lrp_width=3,
+        )
+        self.query_loader = torch_data.DataLoader(
+            query_LRP,
+            batch_size=64,
+            shuffle=False,
+            collate_fn=collate_lrp_dgl_light_index_form_wrapper(4),
+        )
