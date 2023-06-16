@@ -30,5 +30,6 @@ desco.egg-info/
 orca/
 .vscode/
 experimental/gml/*
+experimental/DualMessagePassing/*
 
 !github_resource/*
