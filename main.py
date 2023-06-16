@@ -263,10 +263,10 @@ def main(
         neighborhood_model = NeighborhoodCountingModel.load_from_checkpoint(
             neighborhood_best_model_path
         )
-        neighborhood_model = neighborhood_model.to_hetero_old(
-            tconv_target=args_neighborhood.use_tconv,
-            tconv_query=args_neighborhood.use_tconv,
-        )
+        # neighborhood_model = neighborhood_model.to_hetero_old(
+        #     tconv_target=args_neighborhood.use_tconv,
+        #     tconv_query=args_neighborhood.use_tconv,
+        # )
         neighborhood_model.set_queries(
             query_ids=query_ids, queries=nx_queries, transform=neighborhood_transform
         )
@@ -356,7 +356,7 @@ def main(
             gossip_trainer.tune(gossip_model, gossip_dataloader)
         if len(devices) > 1:
             raise NotImplementedError(
-                "multi-gpu training for gossip model is not recommanded."
+                "multi-gpu training for gossip model is not recommended."
             )
             gossip_multigpu_trainer = pl.Trainer(
                 max_epochs=args_gossip.epoch_num,
