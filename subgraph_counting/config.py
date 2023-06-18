@@ -52,7 +52,7 @@ def parse_encoder(parser, arg_str=None):
         opt_scheduler="none",
         opt_restart=100,
         weight_decay=0.0,
-        lr=1e-4,
+        lr=1e-3,
         margin=0.1,
         test_set="",
         eval_interval=1000,
@@ -137,7 +137,7 @@ def parse_count(parser, arg_str=None):
         batch_size=64,
         weight_decay=0.0,
         lr=1e-3,
-        num_epoch=5,
+        num_epoch=50,
         dataset="ENZYMES",
         gpu="cuda",
         # relabel_mode="decreasing_degree"
@@ -386,7 +386,7 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
     opt_parser.set_defaults(
         train_dataset="Syn_1827",
         valid_dataset="Syn_1827",
-        test_dataset="MUTAG",
+        test_dataset="ENZYMES",
         gpu=1,
         num_cpu=8,
         output_dir=None,

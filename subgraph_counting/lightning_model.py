@@ -611,8 +611,8 @@ class DIAMNETModel(pl.LightningModule):
         )
         # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", factor=0.5, patience=20, min_lr=1e-5
-        )  # add schedular
+            optimizer, mode="min", factor=0.5, patience=20, min_lr=0.00001
+        )  # add scheduler
 
         return {
             "optimizer": optimizer,

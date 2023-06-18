@@ -28,7 +28,7 @@ from subgraph_counting.lightning_data import (
     LightningDataLoader_LRP,
 )
 from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat, get_truth
-from subgraph_counting.workload import Workload, graph_atlas_plus
+from subgraph_counting.workload import Workload_baseline, graph_atlas_plus
 from subgraph_counting.utils import add_node_feat_to_networkx
 from subgraph_counting.analysis import norm_mse, mae
 
@@ -99,9 +99,9 @@ def main(
     device = torch.device(args.gpu if torch.cuda.is_available() else "cpu")
     if train_LRP:
         LRP_model = LRPModel(1, lrp_args.hidden_dim, model_args)
-        LRP_model.load_state_dict(
-            torch.load("ckpt/debug/LRP_345_synXL_qs_epo50.pt")["state_dict"]
-        )
+        # LRP_model.load_state_dict(
+        #     torch.load("ckpt/debug/LRP_345_synXL_qs_epo50_init.pt")["state_dict"]
+        # )
     else:
         LRP_model = LRPModel.load_from_checkpoint(LRP_checkpoint)
     LRP_model.set_queries(query_ids, device)
@@ -117,7 +117,7 @@ def main(
     if train_LRP:
         train_dataset = load_data(train_dataset_name, transform=None)
 
-        train_workload = Workload(
+        train_workload = Workload_baseline(
             train_dataset,
             "data/" + train_dataset_name,
             hetero_graph=False,
@@ -131,7 +131,7 @@ def main(
 
         val_dataset = train_dataset
 
-        val_workload = Workload(
+        val_workload = Workload_baseline(
             val_dataset,
             "data/" + val_dataset_name,
             hetero_graph=False,
@@ -146,7 +146,7 @@ def main(
     if test_LRP:
         test_dataset = load_data(test_dataset_name, transform=None)
 
-        test_workload = Workload(
+        test_workload = Workload_baseline(
             test_dataset,
             "data/" + test_dataset_name,
             hetero_graph=False,
@@ -241,6 +241,11 @@ def main(
 
 
 if __name__ == "__main__":
+    # torch.random.manual_seed(0)
+    # np.random.seed(0)
+    # lightning random seed
+    pl.seed_everything(0)
+
     atlas_graph = defaultdict(list)
     for i in range(4, 1253):
         # for i in range(4,53):
