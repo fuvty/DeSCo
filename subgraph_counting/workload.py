@@ -170,21 +170,38 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
         super(NeighborhoodDataset, self).__init__(
             root, transform, pre_transform, pre_filter
         )
-        self.data, self.slices = torch.load(self.processed_paths[0])
-        self.nx_neighs_index = np.load(
-            self.processed_paths[1]
-        )  # numpy 2D int array to show (graph_id, node_id) of each neighborhood, with shape (#neighborhood, 2)
-        self.nx_neighs_indicator = np.load(
-            self.processed_paths[2]
-        )  # numpy bool array of shape (#n), indicating wheather the node is chosen as a neighborhood. size = #node in the dataset.
+        if not (
+            os.path.exists(self.processed_paths[0])
+            and os.path.exists(self.processed_paths[1])
+            and os.path.exists(self.processed_paths[2])
+        ):
+            self.process()
+
+        else:
+            self.data, self.slices = torch.load(self.processed_paths[0])
+            self.nx_neighs_index = np.load(
+                self.processed_paths[1]
+            )  # numpy 2D int array to show (graph_id, node_id) of each neighborhood, with shape (#neighborhood, 2)
+            self.nx_neighs_indicator = np.load(
+                self.processed_paths[2]
+            )  # numpy bool array of shape (#n), indicating wheather the node is chosen as a neighborhood. size = #node in the dataset.
 
     @property
     def processed_file_names(self):
         suffix = "_node_feat" if self.node_feat else ""
+        suffix_homo = "_homo" if not self.hetero_graph else ""
         return [
-            "neighs_pyg_depth_" + str(self.depth_neigh) + suffix + ".pt",
-            "neighs_index_depth_" + str(self.depth_neigh) + suffix + ".npy",
-            "neighs_indicator_depth_" + str(self.depth_neigh) + suffix + ".npy",
+            "neighs_pyg_depth_" + str(self.depth_neigh) + suffix + suffix_homo + ".pt",
+            "neighs_index_depth_"
+            + str(self.depth_neigh)
+            + suffix
+            + suffix_homo
+            + ".npy",
+            "neighs_indicator_depth_"
+            + str(self.depth_neigh)
+            + suffix
+            + suffix_homo
+            + ".npy",
         ]
 
     def process(self):
@@ -387,95 +404,6 @@ class Workload:
             self.node_feat_len = 1
 
         self.node_feat_key = "feat"
-
-    def get_DIAMNET_workload(self, query_ids, args, load_list=["neighs_pyg"]):
-
-        GRAPHLET = True
-        if GRAPHLET:
-            args.hetero = True
-            # load_list.append('graphs_nx') if 'graphs_nx' not in load_list else None
-            load_list = ["graphs_nx"]
-
-        if args.dataset == "syn":
-            name = (
-                args.dataset
-                + "_"
-                + "gossip_"
-                + str(args.n_neighborhoods)
-                + "_"
-                + "n_query_"
-                + str(len(query_ids))
-                + "_"
-                + "all"
-            )
-        else:
-            name = (
-                args.dataset
-                + "_"
-                + "gossip_"
-                + "n_query_"
-                + str(len(query_ids))
-                + "_"
-                + "all"
-            )
-        # if args.use_log:
-        #     name += "_log"
-        if args.use_norm:
-            name += "_norm"
-        if args.objective == "graphlet":
-            name += "_graphlet"
-        if args.relabel_mode is not None:
-            name += "_" + args.relabel_mode
-        name = name.replace("/", "_")
-
-        if args.hetero:
-            name = name + "_hetero"
-
-        workload_file = "subgraph_counting/workload/general/" + name
-        workload_file_full = (
-            "subgraph_counting/workload/general/"
-            + args.dataset
-            + "_gossip_n_query_994_all"
-            + "_hetero"
-        )
-
-        if os.path.exists(workload_file):
-            print("load ground truth from " + workload_file)
-            self.load(workload_file, load_list=load_list)
-        # elif os.path.exists(workload_file_full):
-        #     print("load ground truth from full workload "+workload_file_full)
-        #     workload = Workload(name, sample_neigh= False, hetero_graph= args.hetero)
-        #     workload.load(workload_file_full, load_list= load_list)
-        else:
-            raise Exception("workload file not found")
-            print("generate and save ground truth to " + workload_file)
-            self.gen_workload_general(query_ids, args)
-            self.save(workload_file)
-
-        num_query = len(query_ids)
-
-        if GRAPHLET:
-            args.use_hetero = False
-            print("convert to graphlet")
-            self.neighs_pyg = []
-            for nx_graph in self.graphs_nx:
-                count_dict = dict()
-                count_list = []
-                # convert networkx to pyg and init node feature with zero tensor
-                pyg_graph = pyg.utils.from_networkx(nx_graph)
-                pyg_graph.node_feature = torch.zeros(len(nx_graph), 1)
-                for key in pyg_graph.keys:
-                    if key.split("_")[0] == "count":
-                        query_id = int(key.split("_")[1])
-                        count_dict[query_id] = torch.log2(
-                            torch.sum(2 ** pyg_graph[key] - 1) + 1
-                        )
-                query_ids_cur = sorted(list(count_dict.keys()))
-                for query_id in query_ids_cur:
-                    count_list.append(count_dict[query_id])
-                pyg_graph.y = torch.stack(count_list, dim=0).view(1, -1)
-
-                self.neighs_pyg.append(pyg_graph)
 
     def generate_pipeline_datasets(
         self,
@@ -815,15 +743,76 @@ class Workload_baseline:
         self.DIAMNET_dataset = None
         self.canonical_count_truth = None
         self.graphlet_count_truth = None
+        self.root = root
+        self.hetero_graph = hetero_graph
+        self.node_feat_len = node_feat_len
+        self.use_node_feat = node_feat_len != -1
+
+    def get_canonical_count_truth(self, query_ids, queries):
+        assert queries is not None and query_ids is None
+        if Workload.exist_groundtruth(self, query_ids=query_ids, queries=queries):
+            print("load canonical count truth")
+            self.canonical_count_truth = Workload.load_groundtruth(
+                self, query_ids=query_ids, queries=queries
+            )
+            return self.canonical_count_truth
+        else:
+            print("create canonical count truth")
+            raise NotImplementedError
+            self.canonical_count_truth = Workload.compute_groundtruth(
+                self,
+                query_ids=query_ids,
+                queries=queries,
+                num_workers=1,
+                save_to_file=True,
+            )
+            return self.canonical_count_truth  # shape (#node, #query)
 
     def canonical_to_graphlet_truth(self, canonical_count_truth: torch.Tensor):
-        ptr = torch.zeros(len(self.graphs_nx) + 1, dtype=torch.int64)
-        for i, g in enumerate(self.graphs_nx):
-            ptr[i + 1] = ptr[i] + g.number_of_nodes()
+        ptr = torch.zeros(len(self.dataset) + 1, dtype=torch.int64)
+        for i, g in enumerate(self.dataset):
+            ptr[i + 1] = ptr[i] + g.num_nodes
         self.graphlet_count_truth = segment_csr(
             canonical_count_truth, ptr, reduce="sum"
         )
-        return self.graphlet_count_truth
+        return self.graphlet_count_truth  # shape (#graph, #query)
+
+    def generate_LRP_dataset(self, query_ids, args, filter=False):
+        self.neighs_pyg = []
+        for i, pyg_graph in enumerate(self.dataset):
+            pyg_graph.node_feature = torch.zeros(pyg_graph.num_nodes, 1)
+            log_count_truth = torch.log2(self.graphlet_count_truth[i] + 1)
+            pyg_graph.y = log_count_truth.view(1, -1)
+            self.neighs_pyg.append(pyg_graph)
+
+        name = self.get_LRP_workload_name(
+            args.dataset,
+            len(query_ids),
+            args.n_neighborhoods,
+            args.use_norm,
+            args.objective,
+            args.relabel_mode,
+            True,
+        )
+        self.LRP_dataset = LRP_Dataset(
+            args.dataset,
+            self.neighs_pyg,
+            labels=[g.y for g in self.neighs_pyg],
+            lrp_save_path=name,
+            lrp_depth=1,
+            subtensor_length=4,
+            lrp_width=3,
+            filter_threshold=100 if filter else 1000,
+        )
+
+    def generate_DIAMNET_dataset(self, query_ids, args):
+        self.neighs_pyg = []
+        for i, pyg_graph in enumerate(self.dataset):
+            pyg_graph.node_feature = torch.zeros(pyg_graph.num_nodes, 1)
+            log_count_truth = torch.log2(self.graphlet_count_truth[i] + 1)
+            pyg_graph.y = log_count_truth.view(1, -1)
+            self.neighs_pyg.append(pyg_graph)
+        self.DIAMNET_dataset = self.neighs_pyg
 
     def get_LRP_workload(self, query_ids, args, load_list=["neighs_pyg"]):
         GRAPHLET = True
@@ -977,7 +966,7 @@ class Workload_baseline:
         if hetero:
             name = name + "_hetero"
 
-        workload_file = "subgraph_counting/workload/general/" + name
+        workload_file = "data_LRP/" + name
 
         return workload_file
 

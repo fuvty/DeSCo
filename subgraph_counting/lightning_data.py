@@ -41,7 +41,7 @@ class LightningDataLoader_LRP(LightningDataModule):
 
     def val_dataloader(self) -> torch_data.DataLoader:
         return torch_data.DataLoader(
-            self.train_dataset,
+            self.val_dataset,
             batch_size=self.batch_size,
             shuffle=self.shuffle,
             collate_fn=collate_lrp_dgl_light_index_form_wrapper(4),
@@ -49,7 +49,7 @@ class LightningDataLoader_LRP(LightningDataModule):
 
     def test_dataloader(self) -> torch_data.DataLoader:
         return torch_data.DataLoader(
-            self.train_dataset,
+            self.test_dataset,
             batch_size=self.batch_size,
             shuffle=self.shuffle,
             collate_fn=collate_lrp_dgl_light_index_form_wrapper(4),

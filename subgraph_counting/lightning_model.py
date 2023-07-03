@@ -35,7 +35,12 @@ from subgraph_counting.DIAMNet import DIAMNet
 
 
 def gen_queries(
-    query_ids: List[int], queries=None, transform=None, node_feat_len: int = 1
+    query_ids: List[int],
+    queries=None,
+    transform=None,
+    node_feat_len: int = 1,
+    hetero=True,
+    device="cpu",
 ) -> Tuple[List[pyg.data.data.Data], List[nx.Graph]]:
     """
     generate queries according to the atlas ids
@@ -59,10 +64,19 @@ def gen_queries(
             queries_nx = queries_nx_with_feat
     else:
         queries_nx = queries
-    queries_pyg = [
-        NetworkxToHetero(query, type_key="type", feat_key="feat")
-        for query in queries_nx
-    ]
+    if hetero:
+        queries_pyg = [
+            NetworkxToHetero(query, type_key="type", feat_key="feat")
+            for query in queries_nx
+        ]
+    else:
+        queries_pyg = [
+            pyg.utils.from_networkx(query).to(device) for query in queries_nx
+        ]
+        for query_pyg in queries_pyg:
+            query_pyg.node_feature = torch.zeros(
+                (query_pyg.num_nodes, 1), device=device
+            )
 
     # for query_pyg in queries_pyg:
     # query_pyg['union_node'].node_feature = torch.zeros((query_pyg['union_node'].num_nodes, 1))
@@ -274,9 +288,16 @@ class NeighborhoodCountingModel(pl.LightningModule):
         loss = loss_regression
         return loss
 
-    def set_queries(self, query_ids, queries=None, transform=None):
+    def set_queries(
+        self, query_ids, queries=None, transform=None, hetero=True, device="cpu"
+    ):
         queries_pyg, queries_nx = gen_queries(
-            query_ids, queries, transform=transform, node_feat_len=self.input_dim
+            query_ids,
+            queries,
+            transform=transform,
+            node_feat_len=self.input_dim,
+            hetero=hetero,
+            device=device,
         )
         min_len_neighbor = max(nx.diameter(query) for query in queries_nx)
         if self.depth < min_len_neighbor:
@@ -654,11 +675,13 @@ class DIAMNETModel(pl.LightningModule):
                 query_embs[query_id][0].repeat(emb_target[0].shape[0], 1, 1),
                 query_embs[query_id][1].repeat(emb_target[1].shape[0], 1),
             )
-            # emb = (emb_target, query_emb)
+            # emb = (emb_target, emb_query)
             # emb_target, emb_query = emb
-            emb_target, target_lens = emb_target
-            emb_query, query_lens = emb_query
-            results = self.count_model(emb_query, query_lens, emb_target, target_lens)
+            emb_target_cur, target_lens = emb_target
+            emb_query_cur, query_lens = emb_query
+            results = self.count_model(
+                emb_query_cur, query_lens, emb_target_cur, target_lens
+            )
             truth = get_truth(batch)[:, i].view(-1, 1)
             loss = self.criterion(results, truth)
             loss_queries.append(loss)
@@ -676,6 +699,41 @@ class DIAMNETModel(pl.LightningModule):
                 (query_pyg.num_nodes, 1), device=device
             )
         self.query_loader = DataLoader(queries_pyg, batch_size=64)
+        self.query_ids = query_ids
+
+    def predict_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
+        batch = to_device(batch, self.device)
+        emb_queries = []
+        query_lens = []
+        for query_batch in self.query_loader:
+            emb, query_len = self.emb_model_query(query_batch)
+            emb_queries.append(emb)
+            query_lens.append(query_len)
+        emb_queries = torch.cat(emb_queries, dim=0)
+        query_lens = torch.cat(query_lens, dim=0)
+        emb_queries = [
+            (emb_queries[i], query_lens[i]) for i in range(emb_queries.shape[0])
+        ]  # List[Tuple[Tensor, Tensor]], each represent a graph
+        emb_target = self.emb_model(batch)
+
+        query_ids = self.query_ids
+        query_embs = dict()
+        for i, query_id in enumerate(query_ids):
+            query_embs[query_id] = emb_queries[i]
+        pred_result = []
+        for i, query_id in enumerate(query_ids):
+            emb_query = (
+                query_embs[query_id][0].repeat(emb_target[0].shape[0], 1, 1),
+                query_embs[query_id][1].repeat(emb_target[1].shape[0], 1),
+            )
+            emb_target_cur, target_lens = emb_target
+            emb_query_cur, query_lens = emb_query
+            results = self.count_model(
+                emb_query_cur, query_lens, emb_target_cur, target_lens
+            )
+            pred_result.append(results)
+        pred_result = torch.cat(pred_result, dim=1)
+        return pred_result
 
 
 class LRPModel(pl.LightningModule):
@@ -783,9 +841,7 @@ class LRPModel(pl.LightningModule):
             # truth = batch.y[:, i].view(-1, 1)  # shape (batch_size,1)
             truth = get_truth(batch)[:, i].view(-1, 1)
 
-            ######## different at train and test ########
             loss = self.criterion(results, truth)
-            #############################################
 
             loss_accumulate.append(loss)
         loss = torch.mean(torch.stack(loss_accumulate))

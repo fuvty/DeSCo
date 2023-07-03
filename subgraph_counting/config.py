@@ -126,20 +126,21 @@ def parse_count(parser, arg_str=None):
         n_neighborhoods=2048,
         val_size=64 * 100,
         # val_size=64,
-        # model_path = 'ckpt/general/baseline/GIN_DIAMNet_345_syn_qs',
+        model_path="ckpt/general/baseline/DIAMNet/GIN_DIAMNet_345_syn_1827",
         # ckpt/general/motif/sage_345_synXL_qs_triTQ_hetero_epo300.pt
-        model_path="ckpt/general/baseline/LRP/LRP_345_synXL_qs",
+        # model_path="ckpt/general/baseline/LRP/LRP_345_synXL_qs",
+        # model_path="ckpt/general/baseline/DIAMNet/SAGE_DIAMNet_345_syn_qs",
         # model_path = 'ckpt/general/trans/large_query/LRP_345_syn2048_qs_FROM_LRP_345_synXL_qs_epo50.pt',
         use_log=True,
         use_norm=False,
         # use_hetero = True,
         # training
-        batch_size=64,
+        batch_size=4,
         weight_decay=0.0,
         lr=1e-3,
-        num_epoch=50,
-        dataset="ENZYMES",
-        gpu="cuda",
+        num_epoch=300,
+        dataset="Syn",
+        gpu="cuda:0",
         # relabel_mode="decreasing_degree"
         relabel_mode=None,
     )
@@ -244,8 +245,8 @@ def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
         neigh_input_dim=1,
         neigh_hidden_dim=64,
         neigh_dropout=0.0,
-        neigh_model_path="ckpt/kdd23/gossip",
-        neigh_epoch_num=10,
+        neigh_model_path="ckpt/debug/SAGE_new/neigh",
+        neigh_epoch_num=300,
         neigh_batch_size=512,
         depth=4,
         use_hetero=True,
@@ -307,8 +308,8 @@ def parse_gossip(parser, arg_str=None) -> list[argparse._StoreAction]:
         gossip_layer_num=2,
         gossip_hidden_dim=64,
         gossip_dropout=0.01,
-        gossip_model_path="ckpt/kdd23/gossip",
-        gossip_epoch_num=10,
+        gossip_model_path="ckpt/kdd23/CiteSeer_dbd_train/gossip",
+        gossip_epoch_num=30,
         gossip_batch_size=256,
         gossip_lr=1e-3,
         weight_decay=0.0,
@@ -355,16 +356,6 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
         action="store_true",
         help="whether to test gossip counting model",
     )
-    opt_parser.add_argument(
-        "--train_LRP",
-        action="store_true",
-        help="whether to train LRP model",
-    )
-    opt_parser.add_argument(
-        "--test_LRP",
-        action="store_true",
-        help="whether to test LRP model",
-    )
 
     #     opt_parser.add_argument('--opt', dest='opt', type=str,
     #             help='Type of optimizer')
@@ -384,17 +375,19 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
     #             help='Optimizer weight decay.')
 
     opt_parser.set_defaults(
-        train_dataset="Syn_1827",
-        valid_dataset="Syn_1827",
-        test_dataset="ENZYMES",
-        gpu=1,
+        train_dataset="MUTAG",
+        valid_dataset="MUTAG",
+        test_dataset="MUTAG",
+        gpu=0,
         num_cpu=8,
         output_dir=None,
-        neigh_checkpoint="ckpt/kdd23/syn_4096/neighborhood/lightning_logs/version_0/checkpoints/epoch=299-step=424800.ckpt",
-        gossip_checkpoint="ckpt/kdd23/syn_4096/gossip/lightning_logs/version_2/checkpoints/epoch=29-step=122880.ckpt",
-        train_neigh=False,
+        neigh_checkpoint=None,
+        # neigh_checkpoint="ckpt/kdd23/Syn_1827/neighborhood/lightning_logs/version_2/checkpoints/epoch=99-step=11700.ckpt",
+        gossip_checkpoint="ckpt/kdd23/Syn_1827/gossip/lightning_logs/version_2/checkpoints/epoch=99-step=1500.ckpt",
+        # gossip_checkpoint="ckpt/kdd23/Syn_1827/gossip/lightning_logs/version_0/checkpoints/epoch=29-step=240.ckpt",
+        train_neigh=True,
         train_gossip=False,
-        test_gossip=False,
+        test_gossip=True,
     )
 
     # return the keys of the parser

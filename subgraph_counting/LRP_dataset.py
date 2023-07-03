@@ -400,6 +400,7 @@ class LRP_Dataset(object):
         lrp_depth=1,
         subtensor_length=4,
         lrp_width=3,
+        filter_threshold=1000,
     ):
         super(LRP_Dataset, self).__init__()
         """
@@ -413,6 +414,7 @@ class LRP_Dataset(object):
         self.subtensor_length = subtensor_length
         self.lrp_depth = lrp_depth
         self.lrp_width = lrp_width
+        self.filter_threshold = filter_threshold
 
         assert self.subtensor_length == self.lrp_depth * self.lrp_width + 1
 
@@ -432,6 +434,7 @@ class LRP_Dataset(object):
         )
         self.lrp_egonet_seq = np.array([])  # load from file or generate
         self.load_lrp()
+        # self.filter_large_graphs()
 
         # self.num_atom_type = 28 # known meta-info about the zinc dataset; can be calculated as well
         # self.num_bond_type = 4 # known meta-info about the zinc dataset; can be calculated as well
@@ -455,6 +458,9 @@ class LRP_Dataset(object):
             self.LRP_preprocess()
 
     def save_lrp(self):
+        # make sure the directory exists
+        if not os.path.exists(self.lrp_save_path):
+            os.makedirs(self.lrp_save_path)
         print("Saving LRP to ", osp.join(self.lrp_save_path, self.lrp_save_file))
         np.savez(
             osp.join(self.lrp_save_path, self.lrp_save_file), a=self.lrp_egonet_seq
@@ -483,6 +489,19 @@ class LRP_Dataset(object):
                 print(len(self.lrp_egonet_seq), len(self.graphs))
                 exit()
             self.save_lrp()
+
+    def filter_large_graphs(self):
+        remove_list = []
+        for i, g in enumerate(self.graphs):
+            if g.num_nodes > self.filter_threshold:
+                remove_list.append(i)
+        self.graphs = [g for i, g in enumerate(self.graphs) if i not in remove_list]
+        self.labels = [l for i, l in enumerate(self.labels) if i not in remove_list]
+        self.lrp_egonet_seq = [
+            element
+            for i, element in enumerate(self.lrp_egonet_seq)
+            if i not in remove_list
+        ]
 
     def __getitem__(self, idx):
         """Get datapoint with index"""

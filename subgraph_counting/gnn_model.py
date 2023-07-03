@@ -12,6 +12,7 @@ import torch_geometric.nn as pyg_nn
 import torch_geometric.utils as pyg_utils
 import torch_sparse
 import warnings
+import subgraph_counting.DIAMNet as DIAMNet
 
 
 class BaseGNN(nn.Module):
@@ -87,9 +88,18 @@ class BaseGNN(nn.Module):
             data = data.to_homogeneous()
             emb = torch.cat([v for v in emb.values()], dim=0)
 
-        # batch = data.batch.to(data.edge_index.device)
+        batch = data.batch.to(data.edge_index.device)
         try:
-            if self.kwargs["baseline"] == "gossip":
+            if self.kwargs["baseline"] == "DIAMNet":
+                emb = self.post_mp(emb)
+                graph_lens = torch.unique_consecutive(batch, return_counts=True)[
+                    1
+                ].unsqueeze(-1)
+                emb = DIAMNet.split_and_batchify_graph_feats(emb, graph_lens)[
+                    0
+                ]  # return pattern_output, pattern len
+                emb = (emb, graph_lens)  # ALERT: different from the other
+            elif self.kwargs["baseline"] == "gossip":
                 emb = self.post_mp(emb)
             else:
                 raise NotImplementedError

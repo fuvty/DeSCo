@@ -41,6 +41,26 @@ def norm_mse(pred: ndarray, truth: ndarray, groupby: list[list] = None) -> list[
     return norm_mse_list
 
 
+def mse(pred: ndarray, truth: ndarray, groupby: list[list] = None) -> list[float]:
+    """
+    Compute the normalized MSE for each group of queries.
+    Args:
+        pred: the predicted counts of queries, shape (num_graphs, num_queries)
+        truth: the groundtruth counts of queries, shape (num_graphs, num_queries)
+        groupby: a list of lists, each list contains the indices of queries in the same group. If None, all queries are in the same group.
+    """
+    if groupby is None:
+        groupby = [list(range(pred.shape[1]))]
+
+    mse_list = []
+    for group in groupby:
+        mse = np.mean(((pred[:, group] - truth[:, group]) ** 2))
+        print("mean_mse: ", mse)
+        mse_list.append(mse)
+
+    return mse_list
+
+
 def mae(pred: ndarray, truth: ndarray, groupby: list[list]) -> list[float]:
     """
     Compute the normalized MSE for each group of queries.
