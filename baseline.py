@@ -16,11 +16,13 @@ import torch.nn.functional as F
 import torch_geometric as pyg
 import torch_geometric.transforms as T
 
-from subgraph_counting.config import parse_encoder, parse_count, parse_optimizer_LRP
+from subgraph_counting.config import (
+    parse_encoder,
+    parse_count,
+    parse_optimizer_baseline,
+)
 from subgraph_counting.data import gen_query_ids, load_data
 from subgraph_counting.lightning_model import (
-    GossipCountingModel,
-    NeighborhoodCountingModel,
     LRPModel,
     DIAMNETModel,
 )
@@ -28,7 +30,7 @@ from subgraph_counting.lightning_data import (
     LightningDataLoader,
     LightningDataLoader_LRP,
 )
-from subgraph_counting.transforms import ToTconvHetero, ZeroNodeFeat, get_truth
+from subgraph_counting.transforms import get_truth
 from subgraph_counting.workload import Workload_baseline, graph_atlas_plus
 from subgraph_counting.utils import add_node_feat_to_networkx
 from subgraph_counting.analysis import norm_mse, mae
@@ -40,7 +42,7 @@ class DIAMNet_args:
         self.dropout = 0.0
         self.layer_num = 5
         # self.conv_type = 'RGIN'
-        self.conv_type = "SAGE"
+        self.conv_type = "GIN"
         self.use_hetero = False
 
 
@@ -55,11 +57,10 @@ class LRP_args:
 def main(
     LRP: bool = False,
     DIAMNET: bool = True,
-    DeSCo: bool = False,
     train: bool = True,
     test: bool = True,
-    test_dataset_name: str = None,
     train_dataset_name: str = None,
+    test_dataset_name: str = None,
     checkpoint=None,
     nx_queries: List[nx.Graph] = None,
     atlas_query_ids: List[int] = None,
@@ -69,13 +70,13 @@ def main(
     train and test baselines
     """
     parser = argparse.ArgumentParser(description="Order embedding arguments")
-    parse_optimizer_LRP(parser)
+    parse_optimizer_baseline(parser)
     parse_encoder(parser)
 
     model_args = parser.parse_args()
 
     parser = argparse.ArgumentParser(description="Graphlet Count")
-    parse_optimizer_LRP(parser)
+    parse_optimizer_baseline(parser)
     parse_count(parser)
     args = parser.parse_args()
 
@@ -157,7 +158,6 @@ def main(
             train_workload.generate_LRP_dataset(query_ids=query_ids, args=args)
         elif DIAMNET:
             train_workload.generate_DIAMNET_dataset(query_ids=query_ids, args=args)
-        # train_workload.get_LRP_workload(query_ids, args)
 
         val_dataset = train_dataset
 
@@ -179,7 +179,6 @@ def main(
             val_workload.generate_LRP_dataset(query_ids=query_ids, args=args)
         elif DIAMNET:
             val_workload.generate_DIAMNET_dataset(query_ids=query_ids, args=args)
-        # val_workload.get_LRP_workload(query_ids, args)
 
     if test:
         test_dataset = load_data(test_dataset_name, transform=None)
@@ -202,7 +201,6 @@ def main(
             test_workload.generate_LRP_dataset(query_ids=query_ids, args=args)
         elif DIAMNET:
             test_workload.generate_DIAMNET_dataset(query_ids=query_ids, args=args)
-        # test_workload.get_LRP_workload(query_ids, args)
 
     if LRP:
         dataloader = LightningDataLoader_LRP(
@@ -237,7 +235,6 @@ def main(
         )
 
     args.model_path = "ckpt/general/baseline/test"
-    args.num_epoch = 300
     device_num = args.gpu.split(":")[-1]
     trainer = pl.Trainer(
         accelerator="gpu",
@@ -256,9 +253,7 @@ def main(
     # test dataset name
     print("test dataset name: ", test_dataset_name)
     # get predict count
-    LRP_count_pred = torch.cat(
-        trainer.predict(model, dataloader.test_dataloader()), dim=0
-    )
+    count_pred = torch.cat(trainer.predict(model, dataloader.test_dataloader()), dim=0)
     truth = [[] for _ in range(len(query_ids))]
     for batch in dataloader.test_dataloader():
         for i, query_id in enumerate(query_ids):
@@ -276,15 +271,15 @@ def main(
         groupby_list[size_order_dict[query_size_dict[i]]].append(i)
 
     if args.use_log:
-        LRP_count_pred = 2 ** F.relu(LRP_count_pred) - 1
+        count_pred = 2 ** F.relu(count_pred) - 1
         truth = 2**truth - 1
 
-    LRP_count_pred = LRP_count_pred.cpu().numpy()
+    count_pred = count_pred.cpu().numpy()
     truth = truth.cpu().numpy()
 
-    norm_mse_LRP = norm_mse(pred=LRP_count_pred, truth=truth, groupby=groupby_list)
+    norm_mse_LRP = norm_mse(pred=count_pred, truth=truth, groupby=groupby_list)
     print("norm_mse:", norm_mse_LRP)
-    mae_LRP = mae(pred=LRP_count_pred, truth=truth, groupby=groupby_list)
+    mae_LRP = mae(pred=count_pred, truth=truth, groupby=groupby_list)
     print("mae:", mae_LRP)
 
     # print("LRP_count_test shape", LRP_count_test.shape)
@@ -308,13 +303,13 @@ if __name__ == "__main__":
     main(
         LRP=False,
         DIAMNET=True,
-        DeSCo=True,
-        train=False,
+        train=True,
         test=True,
-        test_dataset_name="MUTAG",
         train_dataset_name="Syn_1827",
+        test_dataset_name="MUTAG",
         atlas_query_ids=query_ids,
-        checkpoint="ckpt/general/baseline/DIAMNet/GIN_DIAMNet_345_syn_1827/lightning_logs/version_5/checkpoints/epoch=298-step=8671.ckpt",
+        checkpoint=None,
     )
 
     # diamnet model: ckpt/general/baseline/DIAMNet/GIN_DIAMNet_345_syn_1827/lightning_logs/version_5/checkpoints/epoch=298-step=8671.ckpt
+    # LRP model: ckpt/general/baseline/LRP/LRP_345_Syn_1827/lightning_logs/version_7/checkpoints/epoch=49-step=17600.ckpt
