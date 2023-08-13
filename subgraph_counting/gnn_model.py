@@ -294,6 +294,7 @@ class GossipConv(pyg_nn.MessagePassing):
         self.lin_gate = nn.Sequential(
             nn.Linear(emb_channels, out_channels),
             nn.Sigmoid(),
+            # nn.Linear(out_channels, out_channels),
             nn.Linear(out_channels, 1),
             nn.Sigmoid(),
             nn.LeakyReLU(),

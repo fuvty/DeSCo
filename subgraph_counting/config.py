@@ -238,6 +238,11 @@ def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
     enc_parser.add_argument(
         "--neigh_tune_bs", action="store_true", help="auto tune batch size"
     )
+    enc_parser.add_argument(
+        "--use_canonical",
+        action="store_true",
+        help="whether to use canonical partition",
+    )
 
     enc_parser.set_defaults(
         neigh_conv_type="SAGE",
@@ -245,7 +250,7 @@ def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
         neigh_input_dim=1,
         neigh_hidden_dim=64,
         neigh_dropout=0.0,
-        neigh_model_path="ckpt/debug/SAGE_new/neigh",
+        neigh_model_path="ckpt/DeSCo/Syn_1827/neigh",
         neigh_epoch_num=300,
         neigh_batch_size=512,
         depth=4,
@@ -255,6 +260,7 @@ def parse_neighborhood(parser, arg_str=None) -> list[argparse._StoreAction]:
         zero_node_feat=False,
         neigh_weight_decay=0.0,
         neigh_lr=1e-4,
+        use_canonical=True,
     )
 
     # TODO: add the following arguments
@@ -308,7 +314,7 @@ def parse_gossip(parser, arg_str=None) -> list[argparse._StoreAction]:
         gossip_layer_num=2,
         gossip_hidden_dim=64,
         gossip_dropout=0.01,
-        gossip_model_path="ckpt/kdd23/CiteSeer_dbd_train/gossip",
+        gossip_model_path="ckpt/DeSCo/Syn_1827/gossip",
         gossip_epoch_num=30,
         gossip_batch_size=256,
         gossip_lr=1e-3,
@@ -375,18 +381,18 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
     #             help='Optimizer weight decay.')
 
     opt_parser.set_defaults(
-        train_dataset="MUTAG",
-        valid_dataset="MUTAG",
+        train_dataset="Syn_1827",
+        valid_dataset="Syn_1827",
         test_dataset="MUTAG",
         gpu=0,
         num_cpu=8,
         output_dir=None,
+        # neigh_checkpoint="ckpt/kdd23/Syn_1827/neighborhood/lightning_logs/version_0/checkpoints/epoch=299-step=35100.ckpt",
+        # gossip_checkpoint="ckpt/kdd23/Syn_1827/gossip/lightning_logs/version_2/checkpoints/epoch=99-step=1500.ckpt",
         neigh_checkpoint=None,
-        # neigh_checkpoint="ckpt/kdd23/Syn_1827/neighborhood/lightning_logs/version_2/checkpoints/epoch=99-step=11700.ckpt",
-        gossip_checkpoint="ckpt/kdd23/Syn_1827/gossip/lightning_logs/version_2/checkpoints/epoch=99-step=1500.ckpt",
-        # gossip_checkpoint="ckpt/kdd23/Syn_1827/gossip/lightning_logs/version_0/checkpoints/epoch=29-step=240.ckpt",
+        gossip_checkpoint=None,
         train_neigh=True,
-        train_gossip=False,
+        train_gossip=True,
         test_gossip=True,
     )
 

@@ -11,6 +11,7 @@ from torch_geometric.data import HeteroData, Data, Batch
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.typing import EdgeType, NodeType, QueryType
 import orca
+import random
 
 
 class ZeroNodeFeat(BaseTransform):
@@ -462,7 +463,15 @@ def from_networkx_reorder(
     """
     import networkx as nx
 
-    G = nx.convert_node_labels_to_integers(G, ordering=mode)
+    if mode != "random":
+        G = nx.convert_node_labels_to_integers(G, ordering=mode)
+    else:
+        # generate a random permutation
+        G = nx.convert_node_labels_to_integers(G, ordering="sorted")
+        id_list = [i for i in range(G.number_of_nodes())]
+        random.shuffle(id_list)
+        mapping = {i: id_list[i] for i in range(G.number_of_nodes())}
+        G == nx.relabel_nodes(G, mapping, copy=True)
     G = G.to_directed() if not nx.is_directed(G) else G
 
     if isinstance(G, (nx.MultiGraph, nx.MultiDiGraph)):

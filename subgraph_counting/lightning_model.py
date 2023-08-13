@@ -315,6 +315,59 @@ class NeighborhoodCountingModel(pl.LightningModule):
         emb_queries = torch.cat(emb_queries, dim=0)
         return emb_queries
 
+    def get_target_emb(self, data_loader):
+        emb_targets = []
+        for target_batch in data_loader:
+            emb_targets.append(self.emb_model(target_batch))
+        emb_targets = torch.cat(emb_targets, dim=0)
+        return emb_targets
+
+    def to_hetero_wo_canonical(self, tconv_target=False, tconv_query=False):
+        if tconv_target:
+            self.emb_model.gnn_core = pyg.nn.to_hetero(
+                self.emb_model.gnn_core,
+                (
+                    ["union_node"],
+                    [
+                        ("union_node", "union_triangle", "union_node"),
+                        ("union_node", "union_tride", "union_node"),
+                    ],
+                ),
+                aggr="sum",
+            )
+        else:
+            self.emb_model.gnn_core = pyg.nn.to_hetero(
+                self.emb_model.gnn_core,
+                (
+                    ["union_node"],
+                    [
+                        ("union_node", "union", "union_node"),
+                    ],
+                ),
+                aggr="sum",
+            )
+
+        if tconv_query:
+            self.emb_model_query.gnn_core = pyg.nn.to_hetero(
+                self.emb_model_query.gnn_core,
+                (
+                    ["union_node"],
+                    [
+                        ("union_node", "union_triangle", "union_node"),
+                        ("union_node", "union_tride", "union_node"),
+                    ],
+                ),
+                aggr="sum",
+            )
+        else:
+            self.emb_model_query.gnn_core = pyg.nn.to_hetero(
+                self.emb_model_query.gnn_core,
+                (["union_node"], [("union_node", "union", "union_node")]),
+                aggr="sum",
+            )
+
+        return self
+
     def to_hetero_old(self, tconv_target=False, tconv_query=False):
         if tconv_target:
             self.emb_model.gnn_core = pyg.nn.to_hetero(
@@ -458,11 +511,24 @@ class NeighborhoodCountingModel(pl.LightningModule):
         """
         use_hetero = checkpoint["hyper_parameters"]["args"].use_hetero
         use_tconv = checkpoint["hyper_parameters"]["args"].use_tconv
-        self = (
-            self.to_hetero_old(tconv_target=use_tconv, tconv_query=use_tconv)
-            if use_hetero
-            else self
-        )
+        try:
+            use_canonical = checkpoint["hyper_parameters"]["args"].use_canonical
+        except AttributeError:
+            # default to use canonical
+            use_canonical = True
+        if use_canonical and use_hetero:
+            self = self.to_hetero_old(tconv_target=use_tconv, tconv_query=use_tconv)
+        elif not use_canonical and use_hetero:
+            self = self.to_hetero_wo_canonical(
+                tconv_target=use_tconv, tconv_query=use_tconv
+            )
+        else:
+            self = self
+        # self = (
+        #     self.to_hetero_old(tconv_target=use_tconv, tconv_query=use_tconv)
+        #     if use_hetero
+        #     else self
+        # )
         return None
 
 
@@ -522,8 +588,9 @@ class GossipCountingModel(pl.LightningModule):
         """
         loss_queries = []
 
-        for query_id in range(batch.x.shape[1]):
+        for query_id in range(self.query_emb.shape[0]):
             batch.node_feature = batch.x[:, query_id].view(-1, 1)
+            # batch.node_feature = torch.cat((batch.x[:,self.query_emb.shape[0]:].view(-1, batch.x.shape[1] - self.query_emb.shape[0]), batch.node_feature), dim=1)
             query_emb = (
                 self.query_emb[query_id, :].view(1, -1).detach().to(self.device)
             )  # with shape #query * feature_size, do not update query emb here; used by GossipConv
@@ -545,8 +612,9 @@ class GossipCountingModel(pl.LightningModule):
 
     def graph_to_count(self, batch, query_emb=None) -> torch.Tensor:
         pred_results = []
-        for query_id in range(batch.x.shape[1]):
+        for query_id in range(self.query_emb.shape[0]):
             batch.node_feature = batch.x[:, query_id].view(-1, 1)
+            # batch.node_feature = torch.cat((batch.x[:,self.query_emb.shape[0]:].view(-1, batch.x.shape[1] - self.query_emb.shape[0]), batch.node_feature), dim=1)
             query_emb = (
                 self.query_emb[query_id, :].view(1, -1).detach().to(self.device)
             )  # with shape #query * feature_size, do not update query emb here; used by GossipConv
@@ -880,11 +948,24 @@ class LRPModel(pl.LightningModule):
                 (query_pyg.num_nodes, 1), device=device
             )
         queries_pyg = [g.to("cpu") for g in queries_pyg]
+        if len(queries_pyg) == 1:
+            num_node = queries_pyg[0].num_nodes
+            num_edge = queries_pyg[0].num_edges
+            dataset_name = (
+                "queries_"
+                + str(len(queries_pyg))
+                + "_"
+                + str(num_node)
+                + "_"
+                + str(num_edge)
+            )
+        else:
+            dataset_name = "queries_" + str(len(queries_pyg))
         query_LRP = LRP_Dataset(
-            "queries_" + str(len(queries_pyg)),
+            dataset_name=dataset_name,
             graphs=queries_pyg,
             labels=[torch.zeros(1) for _ in range(len(queries_pyg))],
-            lrp_save_path="/home/nfs_data/weichiyue/2021Summer/tmp_folder",
+            lrp_save_path="/home/eva_share/user_file/weichiyue/2021Summer/tmp_folder",
             lrp_depth=1,
             subtensor_length=4,
             lrp_width=3,

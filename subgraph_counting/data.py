@@ -129,6 +129,12 @@ def load_data(
         else:
             transform = [Relabel(mode="increasing_degree")]
         dataset_name = dataset_name.replace("_increaseByDegree", "")
+    elif "_random" in dataset_name:
+        if transform is not None:
+            transform.append(Relabel(mode="random"))
+        else:
+            transform = [Relabel(mode="random")]
+        dataset_name = dataset_name.replace("_random", "")
 
     # combine transform
     if transform is not None:

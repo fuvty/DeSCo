@@ -263,10 +263,6 @@ def main(
         neighborhood_model = NeighborhoodCountingModel.load_from_checkpoint(
             neighborhood_best_model_path
         )
-        # neighborhood_model = neighborhood_model.to_hetero_old(
-        #     tconv_target=args_neighborhood.use_tconv,
-        #     tconv_query=args_neighborhood.use_tconv,
-        # )
         neighborhood_model.set_queries(
             query_ids=query_ids, queries=nx_queries, transform=neighborhood_transform
         )
@@ -502,6 +498,13 @@ def main(
         print("graphlet_norm_mse_gossip: {}".format(norm_mse_gossip))
         print("graphlet_mae_gossip: {}".format(mae_gossip))
 
+    # write pred_graphlet_gossip and truth_graphlet to csv file
+    if not skip_gossip:
+        file_name = "graphlet_count_{}.csv".format(args_opt.test_dataset)
+        pd.DataFrame(pred_graphlet_gossip).to_csv(os.path.join(output_dir, file_name))
+        file_name = "graphlet_truth_{}.csv".format(args_opt.test_dataset)
+        pd.DataFrame(truth_graphlet).to_csv(os.path.join(output_dir, file_name))
+
     # save the results
     file_name = "analyze_results_{}.txt".format(args_opt.test_dataset)
     with open(os.path.join(output_dir, file_name), "w") as f:
@@ -576,24 +579,6 @@ if __name__ == "__main__":
                 )
             )
             nx_queries = nx_queries_with_node_feat
-    query_ids = None
-
-    # load gml queries from file
-    # num_node_label = args_neighborhood.input_dim
-    # baseline_query_path = 'data/MUTAG/baseline_patterns'
-
-    # iterate through all files ending with gml in the directory
-    # nx_queries = []
-    # for file in os.listdir(baseline_query_path):
-    #     if file.endswith(".gml"):
-    #         nx_graph = nx.read_gml(os.path.join(baseline_query_path, file), label='id').to_undirected()
-    #         for node in nx_graph.nodes:
-    #             label = nx_graph.nodes[node]['label']
-    #             nx_graph.nodes[node]['feat'] = [0.0 for i in range(num_node_label)]
-    #             nx_graph.nodes[node]['feat'][int(label)] = 1.0
-    #             # nx_graph.nodes[node]['feat'] = [0.0]
-    #         nx_queries.append(nx_graph)
-
     query_ids = None
 
     # define the output directory

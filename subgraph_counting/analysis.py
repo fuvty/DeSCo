@@ -30,6 +30,8 @@ def norm_mse(pred: ndarray, truth: ndarray, groupby: list[list] = None) -> list[
     if groupby is None:
         groupby = [list(range(pred.shape[1]))]
 
+    pred = pred.astype(np.float64)
+    truth = truth.astype(np.float64)
     norm_mse_list = []
     for group in groupby:
         mse = np.mean(((pred[:, group] - truth[:, group]) ** 2))
@@ -52,6 +54,8 @@ def mse(pred: ndarray, truth: ndarray, groupby: list[list] = None) -> list[float
     if groupby is None:
         groupby = [list(range(pred.shape[1]))]
 
+    pred = pred.astype(np.float64)
+    truth = truth.astype(np.float64)
     mse_list = []
     for group in groupby:
         mse = np.mean(((pred[:, group] - truth[:, group]) ** 2))

@@ -125,6 +125,14 @@ class GossipDataset(pyg.data.InMemoryDataset):
             self.slices["x"][1] = num_node
             self.slices["y"] = self.slices["x"]
 
+    def apply_neighborhood_embeddings(
+        self, embedding: torch.Tensor, neighborhood_indicator
+    ):
+        num_node = len(neighborhood_indicator)
+        embedding_tensor = torch.zeros(num_node, embedding.shape[1])
+        embedding_tensor[neighborhood_indicator, :] = embedding.detach()
+        self.data.x = torch.cat([self.data.x, embedding_tensor], dim=1)
+
     def aggregate_neighborhood_count(self, count: torch.Tensor) -> torch.Tensor:
         """
         aggregate count of neighborhoods to each graph, return tensor with shape (#graph, #query)
@@ -259,7 +267,7 @@ class NeighborhoodDataset(pyg.data.InMemoryDataset):
                 g = NetworkxToHetero(g, type_key="type", feat_key="feat")
             else:
                 g = pyg.utils.from_networkx(g)
-                g.node_feature = g.node_feature.unsqueeze(dim=-1)
+                # g.node_feature = g.node_feature.unsqueeze(dim=-1)
             g.y = torch.empty([1], dtype=torch.double).reshape(1, 1)
             neighs_pyg.append(g)
 
@@ -344,6 +352,12 @@ class InMemoryDatasetLoader(pyg.data.InMemoryDataset):
     def __init__(self, InMemoryData, transform=None, pre_transform=None):
         super().__init__(None, transform, pre_transform)
         self.data, self.slices = InMemoryData
+
+
+class WoCanonicalDataset(pyg.data.InMemoryDataset):
+    def __init__(self, neighs_pyg, transform=None, pre_transform=None):
+        super().__init__(None, transform, pre_transform)
+        self.data, self.slices = self.collate(neighs_pyg)
 
 
 class Workload:
@@ -716,6 +730,11 @@ class Workload:
             count, self.neighborhood_dataset.nx_neighs_indicator
         )
 
+    def apply_neighborhood_embeddings(self, embeddings):
+        self.gossip_dataset.apply_neighborhood_embeddings(
+            embeddings, self.neighborhood_dataset.nx_neighs_indicator
+        )
+
     def to_networkx(self):
         nx_targets = [
             pyg.utils.to_networkx(
@@ -741,6 +760,7 @@ class Workload_baseline:
         self.dataset = dataset
         self.LRP_dataset = None
         self.DIAMNET_dataset = None
+        self.wo_canonical_dataset = None
         self.canonical_count_truth = None
         self.graphlet_count_truth = None
         self.root = root
@@ -776,6 +796,41 @@ class Workload_baseline:
             canonical_count_truth, ptr, reduce="sum"
         )
         return self.graphlet_count_truth  # shape (#graph, #query)
+
+    def generate_wo_canonical_dataset(self, transform=None):
+
+        add_zero_feat_trans = ZeroNodeFeat(node_feat_name="x", node_feat_len=1)
+        self.dataset = [add_zero_feat_trans(g) for g in self.dataset]
+        nx_targets = [
+            pyg.utils.to_networkx(g, to_undirected=True, node_attrs=["x"])
+            for g in self.dataset
+        ]
+        # TODO: make it better. Now, force change the name of node feat to 'feat' and make it as tensor
+        for graph in nx_targets:
+            for n, data in graph.nodes(data=True):
+                data["feat"] = torch.tensor(data.pop("x"))
+        self.nx_targets = nx_targets
+
+        neighs_pyg = []
+        for g in tqdm(nx_targets):
+            g = NetworkxToHetero(g, type_key="type", feat_key="feat")
+            g.y = torch.empty([1], dtype=torch.double).reshape(1, 1)
+            neighs_pyg.append(g)
+
+        # add missing edge_index type
+        edge_types = set()
+        for g in neighs_pyg:
+            edge_types.update(g.metadata()[1])
+        for g in neighs_pyg:
+            for edge_type in edge_types:
+                if edge_type not in g.metadata()[1]:
+                    g[edge_type].edge_index = torch.empty((2, 0), dtype=torch.long)
+
+        for i, pyg_graph in enumerate(neighs_pyg):
+            log_count_truth = torch.log2(self.graphlet_count_truth[i] + 1)
+            pyg_graph.y = log_count_truth.view(1, -1)
+
+        self.wo_canonical_dataset = WoCanonicalDataset(neighs_pyg, transform=transform)
 
     def generate_LRP_dataset(self, query_ids, args, filter=False):
         self.neighs_pyg = []
