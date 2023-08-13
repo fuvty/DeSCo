@@ -146,7 +146,7 @@ def parse_count(parser, arg_str=None):
     )
 
 
-def parse_optimizer_LRP(parser):
+def parse_optimizer_baseline(parser):
     opt_parser = parser.add_argument_group()
     opt_parser.add_argument("--opt", dest="opt", type=str, help="Type of optimizer")
     opt_parser.add_argument(
