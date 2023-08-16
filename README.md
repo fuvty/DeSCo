@@ -34,13 +34,30 @@ If you desire to train with the official configuration of DeSCo, straightly run 
 python main.py
 ```
 
-To train the model(s) in the paper with other configurations, please first change the parameters in the last part of `subgraph_counting/config.py`, then run the command above.
+To train the model(s) in the paper with other configurations, please first change the parameters in the last part of `subgraph_counting/config.py` as shown below, then run the command above.
+
+```
+    opt_parser.set_defaults(
+        train_dataset="Syn_1827",
+        valid_dataset="Syn_1827",
+        test_dataset="MUTAG",
+        gpu=0,
+        num_cpu=8,
+        output_dir=None,
+        neigh_checkpoint=None,
+        gossip_checkpoint=None,
+        train_neigh=True,
+        train_gossip=True,
+        test_gossip=True,
+    )
+```
+
 > Please refer to the Appendix for the detailed training parameters.
 <!-- The official configuration file of DeSCo will also be released shortly. -->
 
 ## Evaluation
 
-To evaluate the trained models on real-world datasets, please set the parameters in the last part of `subgraph_counting/config.py` and then run the command:
+To evaluate the trained models on real-world datasets, please set the parameters in the last part of `subgraph_counting/config.py` as shown above and then run the command:
 
 ```eval
 python main.py
@@ -50,8 +67,8 @@ Here is an example for setting the parameters. You should change the following p
 
 ```
 test_dataset="COX2"
-neigh_checkpoint="ckpt/xxx/neigh/xxxxx.ckpt"
-gossip_checkpoint="ckpt/xxx/gossip/xxxxx.ckpt"
+neigh_checkpoint="ckpt/{checkpoint_path}/neigh/{model_name}.ckpt"
+gossip_checkpoint="ckpt/{checkpoint_path}/gossip/{model_name}.ckpt"
 train_neigh=False
 train_gossip=False,
 ```
