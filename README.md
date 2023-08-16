@@ -4,7 +4,21 @@ This repository is the official implementation of DeSCo: Towards Scalable Deep S
 
 ![DeSCo workflow](github_resource/workflow.png?raw=true "DeSCo workflow")
 
+## Code Structure
+
+`main.py` is the implementation of DeSCo.
+
+`baseline.py` is the implementation of two neural baselines (DIAMNet and LRP) that is compared with DeSCo in the paper.
+
+`ablation_gnns.py` is used for the ablation study of the expressive power of SHMP. It implements other expressive GNNs.
+
+`ablation_wo_canonical.py` is used for the ablation study of canonical partition. It implements DeSCo's neighborhood counting stage without canonical partition.
+
+`subgraph_counting` contains all the modules needed by the above python scripts.
+
 ## Requirements
+
+Python >= 3.9
 
 To install requirements:
 
