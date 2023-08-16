@@ -14,23 +14,36 @@ pip install -r requirements.txt
 
 ## Training
 
-To train the model(s) in the paper, please first set the parameters in `subgraph_counting/config.py`, then run this command:
+If you desire to train with the official configuration of DeSCo, straightly run this command:
 
 ```train
 python main.py
 ```
 
-> Please refer to the Appendix for the detailed training parameters. The official configuration file of DeSCo will also be released shortly.
+To train the model(s) in the paper with other configurations, please first change the parameters in the last part of `subgraph_counting/config.py`, then run the command above.
+> Please refer to the Appendix for the detailed training parameters.
+<!-- The official configuration file of DeSCo will also be released shortly. -->
 
 ## Evaluation
 
-The code comes with analysis methods in `subgraph_counting/workload.py`, which outputs the inference count of the model. Users should be able to get any desired metrics with these count easily.
+To evaluate the trained models on real-world datasets, please set the parameters in the last part of `subgraph_counting/config.py` and then run the command:
 
 ```eval
 python main.py
 ```
 
-> The dataset used for evaluation is configured in `subgraph_counting/config.py`
+Here is an example for setting the parameters. You should change the following parameters in the last part of `subgraph_counting/config.py` and remain other parameters unchanged. The path of checkpoints should be replaced by the real path of your trained model checkpoints.
+
+```
+test_dataset="COX2"
+neigh_checkpoint="ckpt/xxx/neigh/xxxxx.ckpt"
+gossip_checkpoint="ckpt/xxx/gossip/xxxxx.ckpt"
+train_neigh=False
+train_gossip=False,
+```
+
+
+The code comes with analysis methods in `subgraph_counting/workload.py`, which outputs the inference count of the model. Users should be able to get any desired metrics with these count easily.
 
 ## Pre-trained Models
 
