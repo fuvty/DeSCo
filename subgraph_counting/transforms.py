@@ -10,7 +10,8 @@ from torch import Tensor
 from torch_geometric.data import HeteroData, Data, Batch
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.typing import EdgeType, NodeType, QueryType
-import orca
+
+# import orca
 import random
 
 
@@ -133,6 +134,8 @@ class ToQconvHetero(BaseTransform):
             to_undirected=True,
             remove_self_loops=True,
         )
+        # need orca module for the rest of the code
+        raise NotImplementedError
         counts = orca.orbit_counts("edge", 4, nx_graph)
         priority = [11, 10, 5, 6, 7, 9, 4, 8, 3, 2]
         cnt = 0

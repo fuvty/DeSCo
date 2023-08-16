@@ -588,7 +588,7 @@ class GossipCountingModel(pl.LightningModule):
         """
         loss_queries = []
 
-        for query_id in range(self.query_emb.shape[0]):
+        for query_id in range(batch.x.shape[1]):
             batch.node_feature = batch.x[:, query_id].view(-1, 1)
             # batch.node_feature = torch.cat((batch.x[:,self.query_emb.shape[0]:].view(-1, batch.x.shape[1] - self.query_emb.shape[0]), batch.node_feature), dim=1)
             query_emb = (
