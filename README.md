@@ -8,13 +8,11 @@ This repository is the official implementation of DeSCo: Towards Scalable Deep S
 
 `main.py` is the implementation of DeSCo.
 
-`baseline.py` is the implementation of two neural baselines (DIAMNet and LRP) that is compared with DeSCo in the paper.
-
-`ablation_gnns.py` is used for the ablation study of the expressive power of SHMP. It implements other expressive GNNs.
-
-`ablation_wo_canonical.py` is used for the ablation study of canonical partition. It implements DeSCo's neighborhood counting stage without canonical partition.
-
 `subgraph_counting` contains all the modules needed by the above python scripts.
+
+>`baseline.py` is the implementation of two neural baselines (DIAMNet and LRP) that is compared with DeSCo in the paper.
+`ablation_gnns.py` is used for the ablation study of the expressive power of SHMP. It implements other expressive GNNs.
+`ablation_wo_canonical.py` is used for the ablation study of canonical partition. It implements DeSCo's neighborhood counting stage without canonical partition.
 
 ## Requirements
 
@@ -51,6 +49,9 @@ To train the model(s) in the paper with other configurations, please first chang
         test_gossip=True,
     )
 ```
+
+Set the bool parameters train_neigh, train_gossip, and test_gossip, to determine whether to train and to test the neighborhood counting and gossip propagation model.
+
 
 > Please refer to the Appendix for the detailed training parameters.
 <!-- The official configuration file of DeSCo will also be released shortly. -->
