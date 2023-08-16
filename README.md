@@ -8,7 +8,7 @@ This repository is the official implementation of DeSCo: Towards Scalable Deep S
 
 `main.py` is the implementation of DeSCo.
 
-`subgraph_counting` contains all the modules needed by the above python scripts.
+`subgraph_counting` contains all the modules needed by python scripts.
 
 >`baseline.py` is the implementation of two neural baselines (DIAMNet and LRP) that is compared with DeSCo in the paper.
 `ablation_gnns.py` is used for the ablation study of the expressive power of SHMP. It implements other expressive GNNs.
