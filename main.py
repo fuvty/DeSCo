@@ -583,7 +583,7 @@ if __name__ == "__main__":
 
     # define the output directory
     if args_opt.output_dir is None:
-        output_dir = "results/kdd23/raw"
+        output_dir = "results/wdsm24/raw"
         time = datetime.datetime.now().strftime("%Y%m%d_%H:%M:%S")
         output_dir = os.path.join(output_dir, time)
     else:
