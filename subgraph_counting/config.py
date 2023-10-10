@@ -391,9 +391,9 @@ def parse_optimizer(parser) -> list[argparse._StoreAction]:
         # gossip_checkpoint="ckpt/kdd23/Syn_1827/gossip/lightning_logs/version_2/checkpoints/epoch=99-step=1500.ckpt",
         neigh_checkpoint=None,
         gossip_checkpoint=None,
-        train_neigh=True,
-        train_gossip=True,
-        test_gossip=True,
+        train_neigh=False,
+        train_gossip=False,
+        test_gossip=False,
     )
 
     # return the keys of the parser
