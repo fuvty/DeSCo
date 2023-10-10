@@ -29,28 +29,13 @@ pip install -r requirements.txt
 If you desire to train with the official configuration of DeSCo, straightly run this command:
 
 ```train
-python main.py
+python main.py --train_dataset Syn_1827 --valid_dataset Syn_1827 --test_dataset MUTAG --train_neigh --train_gossip --test_gossip
 ```
 
-To train the model(s) in the paper with other configurations, please first change the parameters in the last part of `subgraph_counting/config.py` as shown below, then run the command above.
+To train the model(s) in the paper with other configurations, please specifies the parameters in the command.
 
-```
-    opt_parser.set_defaults(
-        train_dataset="Syn_1827",
-        valid_dataset="Syn_1827",
-        test_dataset="MUTAG",
-        gpu=0,
-        num_cpu=8,
-        output_dir=None,
-        neigh_checkpoint=None,
-        gossip_checkpoint=None,
-        train_neigh=True,
-        train_gossip=True,
-        test_gossip=True,
-    )
-```
 
-Set the bool parameters train_neigh, train_gossip, and test_gossip, to determine whether to train and to test the neighborhood counting and gossip propagation model.
+The bool parameters train_neigh, train_gossip, and test_gossip, determine whether to train and to test the neighborhood counting and gossip propagation model.
 
 
 > Please refer to the Appendix for the detailed training parameters.
@@ -58,21 +43,13 @@ Set the bool parameters train_neigh, train_gossip, and test_gossip, to determine
 
 ## Evaluation
 
-To evaluate the trained models on real-world datasets, please set the parameters in the last part of `subgraph_counting/config.py` as shown above and then run the command:
+To evaluate the trained models on real-world datasets, please run the following command:
 
 ```eval
-python main.py
+python main.py --test_dataset COX2 --neigh_checkpoint ckpt/{checkpoint_path}/neigh/{model_name}.ckpt --gossip_checkpoint ckpt/{checkpoint_path}/gossip/{model_name}.ckpt --test_gossip
 ```
 
-Here is an example for setting the parameters. You should change the following parameters in the last part of `subgraph_counting/config.py` and remain other parameters unchanged. The path of checkpoints should be replaced by the real path of your trained model checkpoints.
-
-```
-test_dataset="COX2"
-neigh_checkpoint="ckpt/{checkpoint_path}/neigh/{model_name}.ckpt"
-gossip_checkpoint="ckpt/{checkpoint_path}/gossip/{model_name}.ckpt"
-train_neigh=False
-train_gossip=False,
-```
+The above command gives an example of evaluating the trained models on COX2. The path of checkpoints should be replaced by the real path of your trained model checkpoints.
 
 
 The code comes with analysis methods in `subgraph_counting/workload.py`, which outputs the inference count of the model. Users should be able to get any desired metrics with these count easily.
