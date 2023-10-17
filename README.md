@@ -56,7 +56,8 @@ The code comes with analysis methods in `subgraph_counting/workload.py`, which o
 
 ## Pre-trained Models
 
-Given the anonymous request during the revision period, we cannot provide the link to download the pre-trained model for now. It'll be available with the official release of our paper.
+The neighborhood counting and gossip correction model in our paper is trained on our synthetic dataset. Users can download our pre-trained from [here](https://drive.google.com/drive/folders/1JsOepzJxUBLRsFM2O_-Zzd3APJPNrn-m?usp=drive_link)
+
 ## Results
 
 Our model achieves the following performance. The numbers are normalized MSEs of twenty-nine standard queries.
