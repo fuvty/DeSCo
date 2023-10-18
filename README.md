@@ -56,7 +56,7 @@ The code comes with analysis methods in `subgraph_counting/workload.py`, which o
 
 ## Pre-trained Models
 
-The neighborhood counting and gossip correction model in our paper is trained on our synthetic dataset. Users can download our pre-trained model from [here](https://drive.google.com/drive/folders/1JsOepzJxUBLRsFM2O_-Zzd3APJPNrn-m?usp=drive_link)
+The neighborhood counting and gossip propagation model in our paper is trained on our synthetic dataset. Users can download our pre-trained model from [here](https://drive.google.com/drive/folders/1JsOepzJxUBLRsFM2O_-Zzd3APJPNrn-m?usp=drive_link)
 
 ## Results
 
