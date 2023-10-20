@@ -26,22 +26,9 @@ To install requirements:
 pip install -r requirements.txt
 ```
 
-## Training
+## Pre-trained Models
 
-If you desire to train with the official configuration of DeSCo, straightly run this command:
-
-```train
-python main.py --train_dataset Syn_1827 --valid_dataset Syn_1827 --test_dataset MUTAG --train_neigh --train_gossip --test_gossip
-```
-
-To train the model(s) in the paper with other configurations, please specifies the parameters in the command.
-
-
-The bool parameters train_neigh, train_gossip, and test_gossip, determine whether to train and to test the neighborhood counting and gossip propagation model.
-
-
-> Please refer to the Appendix for the detailed training parameters.
-<!-- The official configuration file of DeSCo will also be released shortly. -->
+The neighborhood counting and gossip propagation model in our paper is trained on our synthetic dataset. Users can download our pre-trained model from [here](https://drive.google.com/drive/folders/1JsOepzJxUBLRsFM2O_-Zzd3APJPNrn-m?usp=drive_link)
 
 ## Evaluation
 
@@ -56,9 +43,29 @@ The above command gives an example of evaluating the trained models on COX2. The
 
 The code comes with analysis methods in `subgraph_counting/workload.py`, which outputs the inference count of the model. Users should be able to get any desired metrics with these count easily.
 
-## Pre-trained Models
+## Train from Scratch
 
-The neighborhood counting and gossip propagation model in our paper is trained on our synthetic dataset. Users can download our pre-trained model from [here](https://drive.google.com/drive/folders/1JsOepzJxUBLRsFM2O_-Zzd3APJPNrn-m?usp=drive_link)
+Alternatively, if you wish to train your own model instead of using our pre-trained version, here are the instructions you may need.
+
+### Dataset
+
+To benefit future research, we will release the large synthetic dataset with subgraph count ground-truth soon.
+
+### Code and configurations
+
+If you desire to train with the official configuration of DeSCo, simply run this command:
+
+```train
+python main.py --train_dataset Syn_1827 --valid_dataset Syn_1827 --test_dataset MUTAG --train_neigh --train_gossip --test_gossip
+```
+
+To train the model(s) in the paper with other configurations, please specifies the parameters in the command.
+
+The bool parameters `train_neigh`, `train_gossip`, and `test_gossip`, determine whether to train and to test the neighborhood counting and gossip propagation model.
+
+
+> Please refer to the Appendix for the detailed training parameters.
+<!-- The official configuration file of DeSCo will also be released shortly. -->
 
 ## Results
 
@@ -93,6 +100,19 @@ Our model achieves the following performance. The numbers are normalized MSEs of
 ------------|:-------:|:-------:|:-------:
  DeSCo | 1.1E-03 | 2.0E-03 | 1.0E-02 -->
 
+## Citation
+
+If you find our work useful, please consider citing:
+
+```bibtex
+@article{fu2023desco,
+  title={DeSCo: Towards Generalizable and Scalable Deep Subgraph Counting},
+  author={Fu, Tianyu and Wei, Chiyue and Wang, Yu and Ying, Rex},
+  journal={arXiv preprint arXiv:2308.08198},
+  year={2023}
+}
+```
+
 ## Contributing
 
-Welcome to use the code or contribute to the project upon the official release.
+Welcome to use the code or contribute to the project!
