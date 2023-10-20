@@ -49,7 +49,7 @@ Alternatively, if you wish to train your own model instead of using our pre-trai
 
 ### Dataset
 
-To benefit future research, we release the large synthetic dataset with subgraph count ground-truth that we used in our pre-trained model. Users can download the dataset zip file from [here](https://drive.google.com/drive/folders/1JsOepzJxUBLRsFM2O_-Zzd3APJPNrn-m?usp=drive_link) and move the unziped folder under DeSCo/data/ to train from scratch.
+To benefit future research, we release the large synthetic dataset with subgraph count ground-truth that we used in our pre-trained model. Users can download the dataset zip file from [here](https://drive.google.com/drive/folders/1JsOepzJxUBLRsFM2O_-Zzd3APJPNrn-m?usp=drive_link) and move the unziped folder under ```DeSCo/data/``` to train from scratch.
 
 ### Code and configurations
 
