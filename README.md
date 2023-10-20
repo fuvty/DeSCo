@@ -1,6 +1,8 @@
 # DeSCo: Towards Scalable Deep Subgraph Counting
 
-This repository is the official implementation of DeSCo: Towards Scalable Deep Subgraph Counting.  
+This repository is the official implementation of the [paper](https://arxiv.org/abs/2308.08198): *DeSCo: Towards Scalable Deep Subgraph Counting.*
+
+The paper is accepted by WSDM'24.
 
 ![DeSCo workflow](github_resource/workflow.png?raw=true "DeSCo workflow")
 
