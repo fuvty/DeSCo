@@ -2,7 +2,7 @@
 
 This repository is the official implementation of the [paper](https://arxiv.org/abs/2308.08198): *DeSCo: Towards Scalable Deep Subgraph Counting.*
 
-The paper is accepted by WSDM'24.
+The paper is accepted by WSDM'24. You can view our [project page](https://fuvty.notion.site/Paper-accepted-by-WSDM-24-385bb3245c12484495f6b448f61304a3?pvs=4).
 
 ![DeSCo workflow](github_resource/workflow.png?raw=true "DeSCo workflow")
 
