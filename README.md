@@ -90,7 +90,7 @@ If you find our work useful, please consider citing:
 
 ```bibtex
 @inproceedings{fu2024desco,
-  title={Desco: Towards generalizable and scalable deep subgraph counting},
+  title={DeSCo: Towards Generalizable and Scalable Deep Subgraph Counting},
   author={Fu, Tianyu and Wei, Chiyue and Wang, Yu and Ying, Rex},
   booktitle={Proceedings of the 17th ACM International Conference on Web Search and Data Mining},
   pages={218--227},
