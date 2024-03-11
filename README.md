@@ -1,6 +1,6 @@
-# DeSCo: Towards Scalable Deep Subgraph Counting
+# DeSCo: Towards Generalizable and Scalable Deep Subgraph Counting
 
-This repository is the official implementation of the [paper](https://arxiv.org/abs/2308.08198): *DeSCo: Towards Scalable Deep Subgraph Counting.*
+This repository is the official implementation of the [paper](https://arxiv.org/abs/2308.08198): *DeSCo: Towards Generalizable and Scalable Deep Subgraph Counting.* Please consider staring us if you find it interesting.
 
 The paper is accepted by WSDM'24. You can view our [project page](https://fuvty.notion.site/Paper-accepted-by-WSDM-24-385bb3245c12484495f6b448f61304a3?pvs=4).
 
@@ -67,6 +67,8 @@ The bool parameters `train_neigh`, `train_gossip`, and `test_gossip`, determine 
 > Please refer to the Appendix for the detailed training parameters.
 <!-- The official configuration file of DeSCo will also be released shortly. -->
 
+<!--
+
 ## Results
 
 Our model achieves the following performance. The numbers are normalized MSEs of twenty-nine standard queries.
@@ -80,36 +82,19 @@ Our model achieves the following performance. The numbers are normalized MSEs of
 | DMPNN      | 6.1E+02 | 6.6E+02 | 3.0E+02 | 2.6E+03 | 2.4E+03 | 3.0E+03 | 2.9E+03 | 1.4E+03 | 1.2E+03 | 2.1E+04 | 1.3E+02         | 1.4E+02 | 1.1E+04  | 1.3E+03  | 4.1E+02  |
 | DeSCo      | **2.3E-03** | **8.4E-04** | **6.5E-03** | **6.9E-04** | **5.3E-04** | **5.4E-03** | **5.3E-03** | **5.7E-02** | **5.3E-02** | **8.7E-03** | 2.1E-01         | 4.5E-01 | **2.6E-03** | **3.9E-03** | **8.5E-02** |
 
-
-
-<!-- ### MUTAG
-
- Query-Size   | 3       | 4       | 5  
-------------|:-------:|:-------:|:-------:
- DeSCo | 7.3E-05 | 5.2E-04 | 1.1E-02
-
-### COX2
-
- Query-Size   | 3       | 4       | 5  
-------------|:-------:|:-------:|:-------:
- DeSCo | 2.3E-05 | 9.5E-05 | 7.2E-03
-
-### ENZYMES
-
- Query-Size   | 3       | 4       | 5  
-------------|:-------:|:-------:|:-------:
- DeSCo | 1.1E-03 | 2.0E-03 | 1.0E-02 -->
+-->
 
 ## Citation
 
 If you find our work useful, please consider citing:
 
 ```bibtex
-@article{fu2023desco,
-  title={DeSCo: Towards Generalizable and Scalable Deep Subgraph Counting},
+@inproceedings{fu2024desco,
+  title={Desco: Towards generalizable and scalable deep subgraph counting},
   author={Fu, Tianyu and Wei, Chiyue and Wang, Yu and Ying, Rex},
-  journal={arXiv preprint arXiv:2308.08198},
-  year={2023}
+  booktitle={Proceedings of the 17th ACM International Conference on Web Search and Data Mining},
+  pages={218--227},
+  year={2024}
 }
 ```
 
